@@ -1,0 +1,289 @@
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #0e1015;
+  font-family: 'Nunito', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  user-select: none;
+}
+
+#app canvas { display: block; }
+
+/* HUD de carrera — mismo lenguaje visual que los menús (ver src/ui/menu.css) */
+#hud { position: fixed; inset: 0; overflow: hidden; pointer-events: none; color: var(--vm-cream, #fff4dc); }
+
+kbd {
+  font: inherit;
+  font-size: 0.78em;
+  font-weight: 900;
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  color: #9aa0ad;
+}
+
+/* --- Tarjetas de jugador ------------------------------------------------ */
+.top {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  right: 16px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.card {
+  min-width: 200px;
+  padding: 12px 16px 10px;
+  border-radius: 20px;
+  background: rgba(26, 28, 35, 0.94);
+  border: 4px solid #111318;
+  box-shadow: 0 6px 0 #111318, inset 0 -6px 0 var(--c);
+  transition: transform 0.15s, opacity 0.3s;
+}
+.card[data-i='1'] { text-align: right; }
+.card-name {
+  font-family: 'Lilita One', sans-serif;
+  font-size: 26px;
+  line-height: 1;
+  color: var(--c);
+  -webkit-text-stroke: 4px #111318;
+  paint-order: stroke;
+}
+.card-keys { font-size: 12px; font-weight: 800; color: #9aa0ad; letter-spacing: 1px; margin-top: 2px; }
+.card-info { font-size: 15px; font-weight: 900; margin-top: 4px; }
+.card-status { font-family: 'Lilita One', sans-serif; font-size: 16px; min-height: 1em; margin-top: 2px; color: #e9574a; letter-spacing: 0.5px; }
+.card[data-state='OUT_OF_SCREEN'] { animation: shake 0.3s infinite; box-shadow: 0 6px 0 #111318, inset 0 -6px 0 #e9574a; }
+.card[data-state='ELIMINATED'] { opacity: 0.55; }
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
+}
+
+/* --- Power-up del jugador ---------------------------------------------- */
+.item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-family: 'Lilita One', sans-serif;
+  font-size: 16px;
+  letter-spacing: 0.5px;
+  border: 3px dashed #3a3d47;
+  color: #5b606c;
+}
+.item-icon { font-size: 20px; line-height: 1; }
+.item-key { display: none; }
+.item[data-state='HAS_ITEM'] {
+  border: 3px solid #111318;
+  color: #111318;
+  background: var(--ic);
+  box-shadow: 0 4px 0 #111318;
+  animation: ready 0.9s ease-in-out infinite alternate;
+}
+.item[data-state='HAS_ITEM'] .item-key { display: inline; background: rgba(17, 19, 24, 0.85); color: #fff4dc; }
+.item.got { animation: got 0.4s ease-out; }
+@keyframes ready { to { filter: brightness(1.15); } }
+@keyframes got {
+  from { transform: scale(1.5); }
+  to { transform: scale(1); }
+}
+.effects { font-size: 12px; font-weight: 900; color: #9aa0ad; min-height: 1em; margin-top: 4px; letter-spacing: 0.5px; }
+
+/* --- Botones superiores (pausa / reiniciar) ------------------------------ */
+.top-actions {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+}
+.hud-btn {
+  pointer-events: auto;
+  cursor: pointer;
+  height: 40px;
+  padding: 0 14px;
+  border: 3px solid #111318;
+  border-radius: 12px;
+  box-shadow: 0 4px 0 #111318;
+  background: #2a2d36;
+  color: #fff4dc;
+  font-family: 'Lilita One', sans-serif;
+  font-size: 17px;
+  transition: transform 0.08s, box-shadow 0.08s;
+}
+.hud-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 0 #111318; }
+.hud-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #111318; }
+
+/* --- Countdown ----------------------------------------------------------- */
+.countdowns {
+  position: absolute;
+  top: 24%;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  gap: 60px;
+}
+.cd { text-align: center; color: var(--c); }
+.cd-label {
+  display: inline-block;
+  font-family: 'Lilita One', sans-serif;
+  font-size: 22px;
+  padding: 8px 16px;
+  border-radius: 14px;
+  color: #fff4dc;
+  background: rgba(26, 28, 35, 0.94);
+  border: 4px solid #111318;
+  box-shadow: 0 5px 0 #111318;
+}
+.cd-num {
+  font-family: 'Lilita One', sans-serif;
+  font-size: 150px;
+  line-height: 1.1;
+  -webkit-text-stroke: 14px #111318;
+  paint-order: stroke;
+  text-shadow: 0 10px 0 #111318;
+}
+.cd-num.pop { animation: pop 0.45s ease-out; }
+@keyframes pop {
+  from { transform: scale(1.8); opacity: 0.3; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* --- Flecha hacia el jugador fuera de pantalla --------------------------- */
+.edge-arrow {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+}
+.edge-arrow .arrow {
+  position: absolute;
+  left: -34px;
+  top: -34px;
+  width: 68px;
+  height: 68px;
+  display: grid;
+  align-items: center;
+  justify-items: end;
+  font-size: 30px;
+  color: var(--c);
+  -webkit-text-stroke: 3px #111318;
+  paint-order: stroke;
+  animation: blink 0.5s infinite alternate;
+}
+.edge-arrow .tag {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-family: 'Lilita One', sans-serif;
+  font-size: 14px;
+  color: #111318;
+  background: var(--c);
+  border: 3px solid #111318;
+  padding: 1px 7px;
+  border-radius: 8px;
+}
+@keyframes blink { to { opacity: 0.4; } }
+
+/* --- Resultado ----------------------------------------------------------- */
+.result {
+  position: absolute;
+  z-index: 10;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(10, 11, 14, 0.6);
+  backdrop-filter: blur(3px);
+  pointer-events: auto;
+}
+.result-box {
+  width: min(620px, 92vw);
+  text-align: center;
+  background: #1a1c23;
+  border: 5px solid #111318;
+  border-radius: 28px;
+  box-shadow: 0 12px 0 #111318;
+  overflow: hidden;
+  animation: vmPop 0.3s ease-out;
+}
+.result-box .band { height: 22px; background: repeating-linear-gradient(-45deg, #ffc93c 0 20px, #111318 20px 40px); border-bottom: 5px solid #111318; }
+.result-body { padding: 30px 40px 26px; }
+.result-title {
+  font-family: 'Lilita One', sans-serif;
+  font-size: 56px;
+  line-height: 1.05;
+  -webkit-text-stroke: 8px #111318;
+  paint-order: stroke;
+  text-shadow: 0 6px 0 #111318;
+}
+.result-sub { margin: 12px 0 24px; font-size: 18px; font-weight: 800; color: #9aa0ad; }
+.result-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.result-actions .vm-btn { height: 68px; font-size: 30px; --shadow: 7px; border-radius: 18px; }
+.result-hint { margin-top: 16px; font-size: 14px; font-weight: 800; color: #9aa0ad; }
+
+/* --- Debug (GAME_CONFIG.debug / tecla V) ------------------------------- */
+.debug-safe {
+  position: absolute;
+  inset: var(--safe-y) var(--safe-x);
+  border: 2px dashed rgba(40, 200, 90, 0.9);
+  /* el margen fuera de la zona segura queda sombreado: zona de peligro */
+  box-shadow: 0 0 0 100vmax rgba(255, 60, 40, 0.1);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.debug-safe span {
+  position: absolute;
+  right: 8px;
+  bottom: 4px;
+  font: 700 11px ui-monospace, monospace;
+  color: rgba(40, 160, 80, 0.9);
+}
+.debug-safe.danger { border-color: #ff3b2f; box-shadow: 0 0 0 100vmax rgba(255, 60, 40, 0.22); }
+.debug-safe.danger span { color: #ff3b2f; }
+
+.debug-marker { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+.debug-marker .ring {
+  position: absolute;
+  left: -20px;
+  top: -20px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 3px solid #2ecc71;
+  box-shadow: 0 0 0 2px var(--c);
+}
+.debug-marker .label {
+  position: absolute;
+  left: 24px;
+  top: -10px;
+  white-space: nowrap;
+  font: 800 12px ui-monospace, monospace;
+  color: #fff;
+  background: #1f9d55;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.debug-marker.out .ring { border-color: #ff3b2f; animation: blink 0.4s infinite alternate; }
+.debug-marker.out .label { background: #ff3b2f; }
+
+.debug-panel {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  margin: 0;
+  padding: 10px 12px;
+  font: 12px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #d8ffe0;
+  background: rgba(10, 14, 20, 0.78);
+  border-radius: 8px;
+}
+
+.hidden { display: none !important; }

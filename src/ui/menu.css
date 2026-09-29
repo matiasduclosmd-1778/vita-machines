@@ -1,0 +1,488 @@
+/* ==========================================================================
+   Vita Machines · HUB — sistema visual de los menús (según CDesign/VitaMachines HUB.html)
+   El escenario se diseña a 1920×1080 y se escala para entrar en la ventana.
+   ========================================================================== */
+
+@font-face {
+  font-family: 'Lilita One';
+  src: url('./fonts/LilitaOne-latin.woff2') format('woff2');
+  font-weight: 400;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Nunito';
+  src: url('./fonts/Nunito-latin.woff2') format('woff2');
+  font-weight: 200 1000;
+  font-display: block;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('./fonts/JetBrainsMono-latin.woff2') format('woff2');
+  font-weight: 100 800;
+  font-display: swap;
+}
+
+:root {
+  --vm-ink: #111318;
+  --vm-cream: #fff4dc;
+  --vm-yellow: #ffc93c;
+  --vm-yellow-dark: #f2b01e;
+  --vm-red: #e9574a;
+  --vm-blue: #4fc3e8;
+  --vm-green: #5cc24a;
+  --vm-orange: #f2804a;
+  --vm-panel: rgba(26, 28, 35, 0.96);
+  --vm-surface: #2a2d36;
+  --vm-line: #2a2d36;
+  --vm-field: #3a3d47;
+  --vm-muted: #9aa0ad;
+  --vm-bg: #1a1c22;
+  --vm-stripe: repeating-linear-gradient(-45deg, var(--vm-yellow) 0 20px, var(--vm-ink) 20px 40px);
+}
+
+.vm-root {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  overflow: hidden;
+  background: #0e1015;
+  color: var(--vm-cream);
+  font-family: 'Nunito', system-ui, sans-serif;
+  user-select: none;
+}
+.vm-root.hidden { display: none; }
+/* :where() deja la especificidad en cero para que las clases de cada botón manden */
+:where(.vm-root) button { font: inherit; color: inherit; }
+
+.vm-stage {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1920px;
+  height: 1080px;
+  transform: translate(-50%, -50%) scale(var(--vm-scale, 1));
+  overflow: hidden;
+  background: var(--vm-bg);
+}
+
+/* Fondo ilustrado con paneo lento */
+.vm-bg {
+  position: absolute;
+  inset: 0;
+  background: url('/ui/street.jpg') center 30% / cover;
+  animation: vmPan 70s ease-in-out infinite alternate;
+}
+.vm-shade-left {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(14, 16, 21, 0.94) 0%, rgba(14, 16, 21, 0.8) 32%, rgba(14, 16, 21, 0) 62%);
+}
+.vm-shade-bottom {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(rgba(14, 16, 21, 0.25) 0%, rgba(14, 16, 21, 0.1) 40%, rgba(14, 16, 21, 0.92) 100%);
+}
+.vm-screen {
+  position: absolute;
+  inset: 0;
+  background: rgba(14, 16, 21, 0.78);
+  backdrop-filter: blur(8px);
+  padding: 56px 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+}
+
+@keyframes vmPan { 0% { background-position: 50% 0%; } 100% { background-position: 50% 100%; } }
+@keyframes vmSpin { 100% { transform: rotate(360deg); } }
+@keyframes vmStripe { 100% { background-position: 62px 0; } }
+@keyframes vmPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+@keyframes vmPop { 0% { transform: scale(0.6); opacity: 0; } 60% { transform: scale(1.08); opacity: 1; } 100% { transform: scale(1); } }
+@keyframes vmFadeIn { from { opacity: 0; } to { opacity: 1; } }
+.vm-enter { animation: vmFadeIn 0.18s ease-out; }
+
+/* ---------------------------------------------------------------- tipografía */
+.vm-display {
+  font-family: 'Lilita One', sans-serif;
+  -webkit-text-stroke: var(--stroke, 10px) var(--vm-ink);
+  paint-order: stroke;
+  text-shadow: 0 var(--drop, 8px) 0 var(--vm-ink);
+  line-height: 1;
+}
+.vm-logo {
+  display: flex;
+  flex-direction: column;
+  transform: rotate(-4deg);
+  line-height: 0.85;
+  --size: 150px;
+  --stroke: 12px;
+  --drop: 11px;
+}
+.vm-logo .vm-display { font-size: var(--size); }
+.vm-logo .yellow { color: var(--vm-yellow); }
+.vm-logo .vm-stripe { width: 100%; height: calc(var(--size) * 0.147); margin-top: calc(var(--size) * 0.12); }
+.vm-logo.big { --size: 210px; --stroke: 16px; --drop: 14px; align-items: center; }
+.vm-stripe {
+  height: 22px;
+  border: 5px solid var(--vm-ink);
+  border-radius: 12px;
+  background: var(--vm-stripe);
+}
+.vm-label {
+  font-weight: 900;
+  font-size: 20px;
+  letter-spacing: 3px;
+  color: var(--vm-muted);
+}
+.vm-mono { font-family: 'JetBrains Mono', monospace; }
+.vm-muted { color: var(--vm-muted); }
+
+/* ---------------------------------------------------------------- botones */
+.vm-btn {
+  --shadow: 9px;
+  --bg: var(--vm-cream);
+  --fg: var(--vm-ink);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 34px;
+  height: 88px;
+  background: var(--bg);
+  color: var(--fg) !important;
+  border: 5px solid var(--vm-ink);
+  border-radius: 22px;
+  box-shadow: 0 var(--shadow) 0 var(--vm-ink);
+  font-family: 'Lilita One', sans-serif !important;
+  font-size: 40px;
+  cursor: pointer;
+  transition: transform 0.08s, box-shadow 0.08s, filter 0.12s;
+}
+.vm-btn:hover:not(:disabled) { transform: translateY(-3px); box-shadow: 0 calc(var(--shadow) + 3px) 0 var(--vm-ink); }
+.vm-btn:active:not(:disabled) { transform: translateY(calc(var(--shadow) - 2px)); box-shadow: 0 2px 0 var(--vm-ink); }
+.vm-btn:focus-visible { outline: 4px solid var(--vm-yellow); outline-offset: 4px; }
+.vm-btn:disabled { cursor: not-allowed; filter: saturate(0.3) brightness(0.7); }
+.vm-btn.yellow { --bg: var(--vm-yellow); }
+.vm-btn.red { --bg: var(--vm-red); --fg: var(--vm-cream); }
+.vm-btn.red .vm-display, .vm-btn.red.stroked { -webkit-text-stroke: 5px var(--vm-ink); paint-order: stroke; }
+.vm-btn.dark { --bg: var(--vm-surface); --fg: var(--vm-cream); }
+.vm-btn.hero { height: 104px; font-size: 48px; border-radius: 24px; --shadow: 10px; }
+.vm-btn.small { height: 60px; font-size: 26px; padding: 0 22px; border-width: 4px; border-radius: 14px; --shadow: 6px; }
+.vm-btn.center { justify-content: center; }
+
+.vm-back {
+  height: 84px;
+  padding: 0 28px;
+  font-size: 32px;
+  border-radius: 20px;
+  --shadow: 8px;
+  justify-content: flex-start;
+}
+.vm-kbd {
+  font-family: 'Nunito', sans-serif;
+  font-weight: 900;
+  font-size: 18px;
+  background: var(--vm-ink);
+  padding: 4px 10px;
+  border-radius: 8px;
+  color: var(--vm-muted);
+}
+
+/* ---------------------------------------------------------------- estructura */
+.vm-header { display: flex; align-items: center; gap: 32px; height: 110px; flex: none; }
+.vm-header .vm-display { font-size: 84px; }
+.vm-header .vm-stripe { flex: 1; }
+
+.vm-panel {
+  background: var(--vm-panel);
+  border: 5px solid var(--vm-ink);
+  border-radius: 28px;
+  box-shadow: 0 10px 0 var(--vm-ink);
+  padding: 40px;
+}
+.vm-panel-title { font-family: 'Lilita One', sans-serif; font-size: 38px; margin-bottom: 10px; }
+
+.vm-soon {
+  display: inline-block;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 900;
+  font-size: 15px;
+  letter-spacing: 2px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--vm-ink);
+  color: var(--vm-yellow);
+  vertical-align: middle;
+}
+
+/* Tarjetas seleccionables (modo, mapa) */
+.vm-card {
+  text-align: left;
+  padding: 22px 24px;
+  background: var(--vm-surface);
+  color: var(--vm-cream);
+  border: 5px solid var(--vm-ink);
+  border-radius: 20px;
+  box-shadow: 0 8px 0 var(--vm-ink);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+}
+.vm-card.selected { background: var(--vm-yellow); color: var(--vm-ink); }
+.vm-card:disabled { cursor: not-allowed; opacity: 0.55; }
+.vm-card .title { font-family: 'Lilita One', sans-serif; font-size: 34px; }
+.vm-card .desc { font-weight: 700; font-size: 20px; line-height: 1.3; }
+.vm-card .vm-soon { align-self: flex-start; margin-bottom: 2px; }
+
+.vm-map {
+  padding: 0;
+  background: var(--vm-ink);
+  border: 5px solid var(--vm-ink);
+  border-radius: 20px;
+  box-shadow: 0 8px 0 var(--vm-ink);
+  cursor: pointer;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  color: var(--vm-cream);
+}
+.vm-map.selected { border-color: var(--vm-yellow); color: var(--vm-yellow); }
+.vm-map:disabled { cursor: not-allowed; }
+.vm-map:disabled .thumb { filter: grayscale(0.7) brightness(0.6); }
+.vm-map .thumb { height: 120px; background-size: cover; background-position: center; }
+.vm-map .name { padding: 14px 18px; font-family: 'Lilita One', sans-serif; font-size: 28px; text-align: left; }
+.vm-map .vm-soon { position: absolute; top: 10px; right: 10px; }
+
+/* Segmentado (Sí / No) */
+.vm-seg { display: grid; grid-template-columns: 1fr 1fr; background: var(--vm-ink); border-radius: 20px; padding: 6px; height: 88px; }
+.vm-seg button { border: none; border-radius: 14px; background: transparent; color: var(--vm-muted); font-family: 'Lilita One', sans-serif; font-size: 30px; cursor: pointer; }
+.vm-seg button.on { background: var(--vm-yellow); color: var(--vm-ink); }
+
+/* Stepper de cantidad */
+.vm-count { display: flex; align-items: center; gap: 28px; height: 88px; }
+.vm-count .value { font-family: 'Lilita One', sans-serif; font-size: 56px; color: var(--vm-yellow); min-width: 48px; text-align: center; }
+.vm-count .vm-btn { width: 64px; height: 64px; padding: 0; justify-content: center; font-size: 40px; border-radius: 14px; --shadow: 6px; }
+
+/* Campo de texto */
+.vm-input {
+  height: 80px;
+  background: var(--vm-ink);
+  border: 4px solid var(--vm-field);
+  border-radius: 16px;
+  color: var(--vm-cream);
+  font-family: 'Nunito', sans-serif;
+  font-weight: 800;
+  font-size: 32px;
+  padding: 0 24px;
+  outline: none;
+  user-select: text;
+}
+.vm-input:focus { border-color: var(--vm-yellow); }
+
+/* Filas de ajustes */
+.vm-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 96px;
+  border-bottom: 2px solid var(--vm-line);
+}
+.vm-row:last-child { border-bottom: none; }
+.vm-row > span { font-weight: 800; font-size: 28px; }
+.vm-row .hint { display: block; font-weight: 700; font-size: 18px; color: var(--vm-muted); margin-top: 4px; }
+.vm-stepper { display: flex; align-items: center; gap: 14px; }
+.vm-stepper .value { width: 340px; text-align: center; font-family: 'Lilita One', sans-serif; font-size: 32px; color: var(--vm-yellow); }
+.vm-stepper .vm-btn { width: 60px; height: 60px; padding: 0; justify-content: center; font-size: 32px; border-width: 4px; border-radius: 14px; --shadow: 5px; }
+
+.vm-toggle {
+  width: 124px;
+  height: 60px;
+  border-radius: 30px;
+  border: 4px solid var(--vm-ink);
+  background: var(--vm-field);
+  position: relative;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.vm-toggle::after {
+  content: 'NO';
+  position: absolute;
+  top: 5px;
+  left: 6px;
+  width: 58px;
+  height: 42px;
+  border-radius: 21px;
+  background: var(--vm-cream);
+  color: var(--vm-ink);
+  font-family: 'Lilita One', sans-serif;
+  font-size: 22px;
+  line-height: 42px;
+  text-align: center;
+  transition: left 0.15s;
+}
+.vm-toggle.on { background: var(--vm-green); }
+.vm-toggle.on::after { content: 'SÍ'; left: 54px; }
+
+.vm-range { display: flex; align-items: center; gap: 26px; }
+.vm-range input { width: 340px; accent-color: var(--vm-yellow); height: 8px; cursor: pointer; }
+.vm-range .value { width: 60px; text-align: right; font-family: 'Lilita One', sans-serif; font-size: 32px; color: var(--vm-yellow); }
+
+/* Teclas */
+.vm-keycap {
+  min-width: 150px;
+  height: 60px;
+  padding: 0 18px;
+  background: var(--vm-cream);
+  color: var(--vm-ink);
+  border: 4px solid var(--vm-ink);
+  border-radius: 14px;
+  box-shadow: 0 6px 0 var(--vm-ink);
+  font-family: 'Lilita One', sans-serif;
+  font-size: 28px;
+  cursor: pointer;
+}
+.vm-keycap.long { font-size: 22px; }
+.vm-keycap.listening { background: var(--vm-yellow); animation: vmPulse 0.8s infinite; }
+.vm-keycap:disabled { cursor: default; background: var(--vm-surface); color: var(--vm-cream); }
+
+/* Diálogo modal */
+.vm-modal {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 11, 14, 0.72);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+}
+.vm-dialog {
+  width: 760px;
+  background: #1a1c23;
+  border: 6px solid var(--vm-ink);
+  border-radius: 32px;
+  box-shadow: 0 14px 0 var(--vm-ink);
+  overflow: hidden;
+  animation: vmPop 0.3s ease-out;
+}
+.vm-dialog .band { height: 26px; background: repeating-linear-gradient(-45deg, var(--vm-yellow) 0 22px, var(--vm-ink) 22px 44px); border-bottom: 5px solid var(--vm-ink); }
+.vm-dialog .body { padding: 48px 56px; display: flex; flex-direction: column; gap: 20px; align-items: center; text-align: center; }
+.vm-dialog .title { font-family: 'Lilita One', sans-serif; font-size: 64px; line-height: 1.05; }
+.vm-dialog .text { font-size: 26px; font-weight: 700; color: var(--vm-muted); }
+.vm-dialog .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; width: 100%; margin-top: 20px; }
+.vm-dialog .actions.three { grid-template-columns: 1fr; }
+.vm-dialog .vm-btn { height: 92px; font-size: 38px; justify-content: center; }
+
+/* Aviso flotante */
+.vm-toast {
+  position: absolute;
+  left: 50%;
+  bottom: 70px;
+  transform: translateX(-50%);
+  padding: 18px 34px;
+  background: var(--vm-ink);
+  color: var(--vm-yellow);
+  border-radius: 18px;
+  font-weight: 900;
+  font-size: 26px;
+  z-index: 6;
+  animation: vmPop 0.25s ease-out;
+}
+
+/* Chip de pilotos (arriba a la derecha) */
+.vm-profile {
+  position: absolute;
+  top: 56px;
+  right: 72px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 12px 28px 12px 12px;
+  background: rgba(26, 28, 35, 0.94);
+  border: 5px solid var(--vm-ink);
+  border-radius: 60px;
+  box-shadow: 0 8px 0 var(--vm-ink);
+}
+.vm-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--c, var(--vm-blue));
+  border: 5px solid var(--vm-ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Lilita One', sans-serif;
+  font-size: 30px;
+  color: var(--vm-ink);
+  flex: none;
+}
+.vm-avatars { display: flex; }
+.vm-avatars .vm-avatar + .vm-avatar { margin-left: -18px; }
+.vm-profile .name { font-weight: 900; font-size: 28px; }
+.vm-profile .sub { font-weight: 800; font-size: 18px; color: var(--vm-muted); letter-spacing: 1px; }
+
+/* Tabla de partidas (Unirse) */
+.vm-table-head { display: grid; grid-template-columns: 2.2fr 1.3fr 1.3fr 1fr 1fr 170px; padding: 0 20px; gap: 12px; }
+.vm-lobby-row {
+  display: grid;
+  grid-template-columns: 2.2fr 1.3fr 1.3fr 1fr 1fr 170px;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 20px;
+  background: rgba(17, 19, 24, 0.55);
+  border: 4px solid var(--vm-ink);
+  border-radius: 18px;
+  font-weight: 800;
+  font-size: 24px;
+}
+.vm-lobby-row .host { display: block; font-size: 17px; color: var(--vm-muted); }
+.vm-ping-good { color: var(--vm-green); }
+.vm-ping-mid { color: var(--vm-yellow); }
+.vm-ping-bad { color: var(--vm-orange); }
+
+/* Pilotos del lobby */
+.vm-slot {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 84px;
+  padding: 0 18px;
+  background: rgba(17, 19, 24, 0.55);
+  border: 4px solid var(--vm-ink);
+  border-radius: 18px;
+}
+.vm-slot.me { border-color: var(--vm-yellow); }
+.vm-slot.empty { border: 4px dashed var(--vm-field); justify-content: center; color: var(--vm-field); font-weight: 800; font-size: 22px; }
+.vm-slot .vm-avatar { width: 52px; height: 52px; font-size: 24px; border-width: 4px; border-radius: 12px; }
+.vm-slot .who { flex: 1; font-weight: 900; font-size: 24px; line-height: 1.1; }
+.vm-slot .who small { display: block; font-size: 18px; color: var(--vm-muted); font-weight: 800; }
+.vm-slot .tag { font-size: 14px; color: var(--vm-yellow); letter-spacing: 1px; }
+.vm-state { font-family: 'Lilita One', sans-serif; font-size: 18px; letter-spacing: 1px; padding: 6px 12px; border-radius: 10px; background: var(--vm-field); color: var(--vm-muted); }
+.vm-state.ready { background: var(--vm-green); color: var(--vm-ink); }
+
+.vm-bar { height: 22px; background: var(--vm-ink); border-radius: 11px; overflow: hidden; }
+.vm-bar > div { height: 100%; background: var(--vm-orange); border-radius: 11px; }
+
+/* Pantalla de carga */
+.vm-loading-bar {
+  width: 1100px;
+  height: 48px;
+  background: var(--vm-ink);
+  border: 6px solid var(--vm-ink);
+  border-radius: 24px;
+  overflow: hidden;
+  box-shadow: 0 8px 0 #0a0b0e;
+}
+.vm-loading-bar > div {
+  height: 100%;
+  border-radius: 18px;
+  background: repeating-linear-gradient(-45deg, var(--vm-yellow) 0 22px, var(--vm-yellow-dark) 22px 44px) 0 0 / 62px 100%;
+  animation: vmStripe 0.6s linear infinite;
+  transition: width 0.25s ease-out;
+}
+.vm-spinner { width: 30px; height: 30px; border-radius: 50%; border: 6px dashed var(--vm-yellow); animation: vmSpin 1.4s linear infinite; }

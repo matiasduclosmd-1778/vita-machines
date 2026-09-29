@@ -1,0 +1,9 @@
+# No hace falta subir esto a Vercel (el build usa src/assets/models/corolla.glb)
+node_modules
+dist
+2023_toyota_corolla_hybrid.glb
+CDesign
+*.png
+.DS_Store
+.env*
+.vercel

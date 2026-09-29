@@ -1,0 +1,9 @@
+node_modules
+dist
+.vercel
+.env*
+.DS_Store
+# Modelo original descargado (19 MB); el juego usa la versión optimizada en src/assets/models/
+2023_toyota_corolla_hybrid.glb
+# Capturas sueltas de pruebas
+s2-*.png

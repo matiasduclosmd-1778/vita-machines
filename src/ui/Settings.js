@@ -1,0 +1,84 @@
+import { GAME_CONFIG } from '../config.js';
+
+// Ajustes del jugador: se guardan en el navegador y se aplican sobre GAME_CONFIG.
+// Los valores por defecto salen de config.js, así que config.js sigue siendo la fuente de verdad.
+
+const KEY = 'vita-machines-settings-v1';
+
+const DEFAULT_CONTROLS = GAME_CONFIG.players.map((p) => ({ ...p.controls }));
+
+export const ACTIONS = [
+  { id: 'up', label: 'Acelerar' },
+  { id: 'down', label: 'Frenar / Marcha atrás' },
+  { id: 'left', label: 'Girar a la izquierda' },
+  { id: 'right', label: 'Girar a la derecha' },
+  { id: 'use', label: 'Usar objeto' },
+];
+
+export function defaultSettings() {
+  return {
+    video: {
+      quality: GAME_CONFIG.graphics.quality, // 'high' | 'low'
+      shadows: 'high', // 'high' | 'low' | 'off'
+      renderScale: 1, // 1 | 0.75 | 0.5 (resolución interna)
+      miniature: GAME_CONFIG.graphics.tiltShift.enabled,
+      brightness: 50,
+    },
+    game: {
+      debug: GAME_CONFIG.debug.enabled,
+      outCountdown: GAME_CONFIG.outOfScreen.countdown,
+    },
+    controls: DEFAULT_CONTROLS.map((c) => ({ ...c })),
+  };
+}
+
+export function loadSettings() {
+  const base = defaultSettings();
+  try {
+    const saved = JSON.parse(localStorage.getItem(KEY) || 'null');
+    if (!saved) return base;
+    return {
+      video: { ...base.video, ...saved.video },
+      game: { ...base.game, ...saved.game },
+      controls: base.controls.map((c, i) => ({ ...c, ...(saved.controls?.[i] || {}) })),
+    };
+  } catch {
+    return base;
+  }
+}
+
+export function saveSettings(settings) {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(settings));
+  } catch {
+    // almacenamiento no disponible (modo privado, etc.): los ajustes duran esta sesión
+  }
+}
+
+/** Nombre legible de una tecla (KeyboardEvent.code). */
+export function keyLabel(code) {
+  if (!code) return '—';
+  const named = {
+    ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→',
+    Space: 'ESPACIO', Enter: 'ENTER', ShiftLeft: 'SHIFT IZQ', ShiftRight: 'SHIFT DER',
+    ControlLeft: 'CTRL IZQ', ControlRight: 'CTRL DER', AltLeft: 'ALT', AltRight: 'ALT GR',
+    Tab: 'TAB', Backspace: 'BORRAR', Escape: 'ESC', Slash: '/', Period: '.', Comma: ',',
+    Semicolon: 'Ñ', Quote: '´', BracketLeft: '`', BracketRight: '+', Minus: "'", Equal: '¡',
+    Backslash: 'Ç', IntlBackslash: '<',
+  };
+  if (named[code]) return named[code];
+  if (code.startsWith('Key')) return code.slice(3);
+  if (code.startsWith('Digit')) return code.slice(5);
+  if (code.startsWith('Numpad')) return 'NUM ' + code.slice(6);
+  return code.toUpperCase();
+}
+
+/** Etiqueta corta del set de dirección de un jugador (para el HUD). */
+export function controlsSummary(c) {
+  const arrows = c.up === 'ArrowUp' && c.down === 'ArrowDown' && c.left === 'ArrowLeft' && c.right === 'ArrowRight';
+  if (arrows) return 'Flechas';
+  return [c.up, c.left, c.down, c.right].map(keyLabel).join('');
+}
+
+/** Teclas reservadas por el juego: no se pueden asignar a un jugador. */
+export const RESERVED_KEYS = ['Escape', 'KeyR', 'KeyV', 'KeyG'];
