@@ -12,6 +12,7 @@ export class StunnedEffect extends Effect {
   static label = 'STUNNED';
 
   start() {
+    this.wasGrounded = this.car.grounded;
     // Estrellitas girando sobre el auto
     this.stars = new THREE.Group();
     this.stars.position.y = 2;
@@ -34,6 +35,12 @@ export class StunnedEffect extends Effect {
 
   update(dt) {
     this.stars.rotation.y += dt * 7;
+    // Polvo al aterrizar después de volar por la explosión
+    const car = this.car;
+    if (car.grounded && !this.wasGrounded) {
+      this.ctx.particles.burst({ x: car.position.x, y: car.position.y + 0.2, z: car.position.z }, 14, { color: '#cfc6b8', speed: 6, up: 2, size: 0.45, life: 0.6, gravity: 6 });
+    }
+    this.wasGrounded = car.grounded;
   }
 
   end() {
@@ -56,19 +63,18 @@ class BombProjectile {
     this.age = 0;
     this.travelled = 0;
 
-    this.mesh = new THREE.Group();
-    const body = new THREE.Mesh(
-      new THREE.SphereGeometry(RADIUS, 32, 20),
-      new THREE.MeshPhysicalMaterial({ color: '#1c1c22', roughness: 0.25, metalness: 0.3, clearcoat: 1, clearcoatRoughness: 0.05 }),
-    );
-    body.castShadow = true;
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.14, 16), chrome());
-    cap.position.y = RADIUS;
-    this.spark = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), glow('#ffcc44', 6));
-    this.spark.position.y = RADIUS + 0.2;
-    this.mesh.add(body, cap, this.spark);
+    ({ mesh: this.mesh, spark: this.spark } = buildBomb());
     this.mesh.position.copy(this.pos);
     ctx.scene.add(this.mesh);
+  }
+
+  // Online: lo que necesitan los invitados para dibujarla (ver BombView)
+  get netKind() {
+    return 'bomb';
+  }
+
+  netState() {
+    return [this.pos.x, this.pos.y, this.pos.z, this.age];
   }
 
   /** Devuelve false cuando terminó. */
@@ -123,20 +129,62 @@ class BombProjectile {
     // Empujón: mezcla de la dirección de la bomba y del centro de la explosión hacia el auto
     const dir = new THREE.Vector3(target.position.x - this.pos.x, 0, target.position.z - this.pos.z).normalize();
     dir.addScaledVector(this.vel.clone().normalize(), 1).normalize();
-    target.velocity.addScaledVector(dir, CFG.pushForce);
-    target.bumpVel += CFG.upKick * 0.15;
-    target.spin += (Math.random() < 0.5 ? -1 : 1) * CFG.spin;
-    ctx.effects.add(target, StunnedEffect, CFG.stunDuration);
+    ctx.blast(target, dir, CFG);
   }
 
   update(dt) {
-    // Rebotes cortos mientras avanza
-    this.mesh.position.set(this.pos.x, this.pos.y + Math.abs(Math.sin(this.age * 11)) * 0.35, this.pos.z);
-    this.mesh.rotation.x += dt * 12;
-    this.spark.visible = Math.random() < 0.7;
-    if (Math.random() < 0.5) {
-      this.ctx.particles.emit(this.mesh.position, { x: 0, y: 2, z: 0 }, { life: 0.25, size: 0.15, color: '#ffcc33' });
-    }
+    animateBomb(this, dt);
+  }
+
+  dispose() {
+    this.ctx.scene.remove(this.mesh);
+    this.mesh.traverse((m) => m.geometry?.dispose());
+  }
+}
+
+/** Bomba de juguete: esfera negra barnizada, tapa cromada y mecha encendida. */
+function buildBomb() {
+  const mesh = new THREE.Group();
+  const body = new THREE.Mesh(
+    new THREE.SphereGeometry(RADIUS, 32, 20),
+    new THREE.MeshPhysicalMaterial({ color: '#1c1c22', roughness: 0.25, metalness: 0.3, clearcoat: 1, clearcoatRoughness: 0.05 }),
+  );
+  body.castShadow = true;
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.14, 16), chrome());
+  cap.position.y = RADIUS;
+  const spark = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), glow('#ffcc44', 6));
+  spark.position.y = RADIUS + 0.2;
+  mesh.add(body, cap, spark);
+  return { mesh, spark };
+}
+
+/** Rebotes cortos mientras avanza y chispas de la mecha (b: { mesh, spark, pos, age, ctx }). */
+function animateBomb(b, dt) {
+  b.mesh.position.set(b.pos.x, b.pos.y + Math.abs(Math.sin(b.age * 11)) * 0.35, b.pos.z);
+  b.mesh.rotation.x += dt * 12;
+  b.spark.visible = Math.random() < 0.7;
+  if (Math.random() < 0.5) {
+    b.ctx.particles.emit(b.mesh.position, { x: 0, y: 2, z: 0 }, { life: 0.25, size: 0.15, color: '#ffcc33' });
+  }
+}
+
+/** Invitado online: la bomba que simula el anfitrión, solo para verla. */
+export class BombView {
+  constructor(ctx) {
+    this.ctx = ctx;
+    this.pos = new THREE.Vector3();
+    this.age = 0;
+    ({ mesh: this.mesh, spark: this.spark } = buildBomb());
+    ctx.scene.add(this.mesh);
+  }
+
+  set([x, y, z, age]) {
+    this.pos.set(x, y, z);
+    this.age = age;
+  }
+
+  update(dt) {
+    animateBomb(this, dt);
   }
 
   dispose() {

@@ -43,6 +43,16 @@ export class MagnetEffect extends Effect {
     }
   }
 
+  // Online: el invitado no simula; recibe a quién atrae y si está tirando
+  netExtra() {
+    return [this.target ? this.ctx.cars.indexOf(this.target) : -1, this.pulling ? 1 : 0];
+  }
+
+  applyNetExtra([target, pulling]) {
+    this.target = this.ctx.cars[target] ?? null;
+    this.pulling = !!pulling;
+  }
+
   fixedUpdate(dt) {
     const target = this.ctx.rivalOf(this.car);
     this.target = target;

@@ -4,7 +4,7 @@ import { Effect } from '../EffectManager.js';
 
 const CFG = POWERUP_CONFIG.shield;
 
-/** Cúpula protectora: bloquea bomba, aceite e imán mientras dura. */
+/** Cúpula protectora: bloquea bomba, misil, aceite e imán mientras dura. */
 export class ShieldEffect extends Effect {
   static id = 'SHIELD';
   static label = 'SHIELD';

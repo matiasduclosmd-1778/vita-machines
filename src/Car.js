@@ -9,6 +9,7 @@ const clamp = THREE.MathUtils.clamp;
 const NO_INPUT = { throttle: 0, steer: 0 };
 const STOP_INPUT = { throttle: 0, steer: 0, stop: true };
 const WHEEL_RADIUS = 0.32;
+const TUMBLE_CENTER = 0.6; // altura del eje sobre el que gira la carrocería al dar vueltas
 
 /** Multiplicadores neutros. Los efectos de power-ups los modifican cada paso (ver EffectManager). */
 export const DEFAULT_MODS = { acceleration: 1, maxSpeed: 1, grip: 1, steer: 1, throttle: 1 };
@@ -36,6 +37,7 @@ export class Car {
 
     this.buildMesh(new THREE.Color(player.paint ?? player.color));
     scene.add(this.mesh);
+    this.setDriver(null);
     this.reset(0, 0, 0);
   }
 
@@ -76,7 +78,8 @@ export class Car {
     this.steer = 0;
     this.yawRate = 0;
     this.spin = 0; // giro extra provocado por golpes
-    this.mods = { ...DEFAULT_MODS };
+    this.tumble = null; // vuelta en el aire después de una explosión
+    this.mods = { ...this.baseMods };
     this.forwardSpeed = 0;
     this.accelLong = 0;
     // Visual
@@ -93,6 +96,12 @@ export class Car {
     this.progress ??= 0;
     this.updateCircles();
     this.syncMesh(0);
+  }
+
+  /** Saca el auto de la escena (al rearmar los jugadores para el online). */
+  dispose(scene) {
+    scene.remove(this.mesh);
+    this.paintMaterial.dispose();
   }
 
   eliminate() {
@@ -184,6 +193,22 @@ export class Car {
     this.updateCircles();
   }
 
+  /**
+   * Explosión debajo del auto: lo despega con velocidad vertical `vy` y da `turns` vueltas
+   * de barril (side: 1 = hacia la izquierda, -1 = hacia la derecha) que terminan al aterrizar.
+   * Devuelve cuánto tiempo va a estar en el aire (en piso plano).
+   */
+  launch(vy, turns, side) {
+    if (this.fall) return 0;
+    this.grounded = false;
+    this.vy = Math.max(this.vy, vy);
+    this.airTime = 0;
+    const air = (2 * this.vy) / GAME_CONFIG.terrain.gravity;
+    const total = -side * turns * Math.PI * 2; // rotar sobre +Z lleva el techo hacia la derecha
+    this.tumble = { angle: 0, total, rate: total / air };
+    return air;
+  }
+
   updateCircles() {
     const fx = Math.sin(this.heading) * V.colliderOffset;
     const fz = Math.cos(this.heading) * V.colliderOffset;
@@ -221,8 +246,18 @@ export class Car {
     this.bumpVel += (-180 * this.bump - 12 * this.bumpVel) * dt;
     this.bump += this.bumpVel * dt;
 
-    this.chassis.rotation.set(this.pitch, 0, this.roll);
-    this.chassis.position.y = Math.max(-0.1, this.bump);
+    // Vuelta de barril: en el aire gira al ritmo del vuelo; si aterriza antes, completa la vuelta rápido
+    let tumble = 0;
+    const t = this.tumble;
+    if (t) {
+      t.angle += t.rate * dt * (this.grounded ? 3 : 1);
+      if (Math.abs(t.angle) >= Math.abs(t.total)) this.tumble = null;
+      else tumble = t.angle;
+    }
+    this.chassis.rotation.set(this.pitch, 0, this.roll + tumble);
+    // Girar alrededor del centro de la carrocería (no de la base)
+    this.chassis.position.x = TUMBLE_CENTER * Math.sin(tumble);
+    this.chassis.position.y = Math.max(-0.1, this.bump) + TUMBLE_CENTER * (1 - Math.cos(tumble));
 
     this.wheelAngle += (this.forwardSpeed * dt) / WHEEL_RADIUS;
     for (const w of this.wheels) w.rotation.x = this.wheelAngle;
@@ -230,16 +265,43 @@ export class Car {
   }
 
   /**
+   * Piloto que maneja este auto (GAME_CONFIG.drivers, o null = auto base): sus stats
+   * se convierten en multiplicadores fijos de manejo (baseMods) y de resistencia a golpes.
+   */
+  setDriver(driver) {
+    this.driver = driver;
+    const S = GAME_CONFIG.driverStats;
+    const d = (k) => (driver ? driver.stats[k] - S.base : 0);
+    this.baseMods = {
+      ...DEFAULT_MODS,
+      maxSpeed: 1 + d('vel') * S.maxSpeed,
+      acceleration: 1 + d('acel') * S.acceleration,
+      steer: 1 + d('man') * S.handling,
+      grip: 1 + d('man') * S.handling,
+    };
+    this.toughness = Math.max(0.3, 1 - d('res') * S.toughness); // < 1: los golpes le hacen menos
+    this.mods = { ...this.baseMods };
+  }
+
+  /**
    * Reemplaza la carrocería de primitivas por un modelo 3D (ver world/CarModel.js).
    * La física, las colisiones y la inclinación siguen siendo las mismas.
    */
-  applyModel(model) {
-    const { object, paint } = instantiateCar(model, this.player.paint ?? this.player.color);
+  applyModel(model, color = this.player.paint ?? this.player.color) {
+    const key = `${model.id}:${color}`;
+    if (this.modelKey === key) return;
+    if (this.model) {
+      // Cambio de auto entre carreras: se saca el anterior (la geometría es compartida, la pintura no)
+      this.chassis.remove(this.model);
+      this.paintMaterial.dispose();
+    }
+    const { object, paint } = instantiateCar(model, color);
     for (const child of [...this.chassis.children]) child.visible = false;
     for (const w of this.wheels) w.visible = false;
     this.chassis.add(object);
     this.paintMaterial = paint; // el turbo hace brillar la pintura nueva
     this.model = object;
+    this.modelKey = key;
   }
 
   buildMesh(color) {

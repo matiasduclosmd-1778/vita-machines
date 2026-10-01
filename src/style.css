@@ -287,3 +287,18 @@ kbd {
 }
 
 .hidden { display: none !important; }
+
+/* --- Online: hasta 6 tarjetas ------------------------------------------- */
+.top.compact { justify-content: center; flex-wrap: wrap; gap: 10px; }
+.top.compact .card { min-width: 0; width: 170px; padding: 8px 12px 8px; border-radius: 16px; text-align: left; }
+.top.compact .card-name { font-size: 20px; -webkit-text-stroke-width: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.top.compact .card-info { font-size: 13px; }
+.top.compact .item { font-size: 13px; padding: 2px 8px; margin-top: 6px; }
+.top.compact .item-icon { font-size: 16px; }
+.top.compact .effects { font-size: 11px; }
+.card.me { border-color: var(--c); box-shadow: 0 6px 0 #111318, inset 0 -6px 0 var(--c), 0 0 0 3px #111318; }
+.card.me .card-name::after { content: ' · TÚ'; font-size: 0.6em; color: var(--vm-cream, #fff4dc); }
+.result-wait { display: grid; place-items: center; font-family: 'Lilita One', sans-serif; font-size: 22px; color: #9aa0ad; }
+.result-actions.hidden, .result-hint.hidden { display: none; }
+/* Con muchas tarjetas arriba, Pausa pasa a la esquina de abajo */
+.top.compact ~ .top-actions { top: auto; bottom: 16px; left: auto; right: 16px; transform: none; }

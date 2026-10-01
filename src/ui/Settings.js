@@ -6,6 +6,7 @@ import { GAME_CONFIG } from '../config.js';
 const KEY = 'vita-machines-settings-v1';
 
 const DEFAULT_CONTROLS = GAME_CONFIG.players.map((p) => ({ ...p.controls }));
+const DRIVER_IDS = GAME_CONFIG.drivers.map((d) => d.id);
 
 export const ACTIONS = [
   { id: 'up', label: 'Acelerar' },
@@ -29,6 +30,8 @@ export function defaultSettings() {
       outCountdown: GAME_CONFIG.outOfScreen.countdown,
     },
     controls: DEFAULT_CONTROLS.map((c) => ({ ...c })),
+    drivers: GAME_CONFIG.players.map((p) => p.driver), // último piloto elegido por cada jugador
+    profile: { name: '' }, // nombre del piloto (se pide al entrar al juego)
   };
 }
 
@@ -41,6 +44,9 @@ export function loadSettings() {
       video: { ...base.video, ...saved.video },
       game: { ...base.game, ...saved.game },
       controls: base.controls.map((c, i) => ({ ...c, ...(saved.controls?.[i] || {}) })),
+      profile: { ...base.profile, ...saved.profile },
+      // Un piloto que ya no existe en config.js vuelve al de por defecto
+      drivers: base.drivers.map((id, i) => (DRIVER_IDS.includes(saved.drivers?.[i]) ? saved.drivers[i] : id)),
     };
   } catch {
     return base;

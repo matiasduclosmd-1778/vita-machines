@@ -62,14 +62,9 @@ class OilSlick {
     this.y = g.onTrack ? g.h : owner.position.y;
     this.z = z;
 
-    this.mesh = new THREE.Mesh(
-      blobGeometry(CFG.radius),
-      liquid('#141018', { iridescence: 1 }), // aceite con brillo tornasolado
-    );
-    this.mesh.rotation.x = -Math.PI / 2;
-    this.mesh.rotation.z = Math.random() * Math.PI * 2;
+    this.seed = Math.random() * 10;
+    this.mesh = buildSlick(this.seed);
     this.mesh.position.set(x, this.y + 0.03, z);
-    this.mesh.receiveShadow = true;
     ctx.scene.add(this.mesh);
     ctx.particles.burst({ x, y: this.y + 0.3, z }, 10, { color: '#2b2233', speed: 4, up: 3, size: 0.25, gravity: 12 });
   }
@@ -87,9 +82,55 @@ class OilSlick {
   }
 
   update() {
-    // Se achica en el último segundo
-    const k = Math.min(1, (CFG.lifetime - this.age) / 1);
-    this.mesh.scale.setScalar(Math.max(0.01, k));
+    shrinkSlick(this.mesh, this.age);
+  }
+
+  // Online: lo que necesitan los invitados para dibujarla (ver OilView)
+  get netKind() {
+    return 'oil';
+  }
+
+  netState() {
+    return [this.x, this.y, this.z, this.age, this.seed];
+  }
+
+  dispose() {
+    this.ctx.scene.remove(this.mesh);
+    this.mesh.geometry.dispose();
+  }
+}
+
+/** Mancha: aceite con brillo tornasolado y borde irregular (la forma sale de `seed`). */
+function buildSlick(seed) {
+  const mesh = new THREE.Mesh(blobGeometry(CFG.radius, seed), liquid('#141018', { iridescence: 1 }));
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.rotation.z = seed * 2.7;
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
+/** Se achica en el último segundo. */
+function shrinkSlick(mesh, age) {
+  const k = Math.min(1, (CFG.lifetime - age) / 1);
+  mesh.scale.setScalar(Math.max(0.01, k));
+}
+
+/** Invitado online: la mancha que simula el anfitrión, solo para verla. */
+export class OilView {
+  constructor(ctx, [x, y, z, , seed]) {
+    this.ctx = ctx;
+    this.age = 0;
+    this.mesh = buildSlick(seed);
+    this.mesh.position.set(x, y + 0.03, z);
+    ctx.scene.add(this.mesh);
+  }
+
+  set([, , , age]) {
+    this.age = age;
+  }
+
+  update() {
+    shrinkSlick(this.mesh, this.age);
   }
 
   dispose() {
@@ -99,10 +140,9 @@ class OilSlick {
 }
 
 /** Círculo con borde irregular. */
-function blobGeometry(radius) {
+function blobGeometry(radius, phase) {
   const shape = new THREE.Shape();
   const n = 18;
-  const phase = Math.random() * 10;
   for (let i = 0; i <= n; i++) {
     const a = (i / n) * Math.PI * 2;
     const r = radius * (0.82 + 0.18 * Math.sin(a * 3 + phase) + 0.08 * Math.sin(a * 7 + phase * 2));

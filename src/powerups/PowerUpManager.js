@@ -5,13 +5,15 @@ import { PlayerInventory, InventoryState } from './PlayerInventory.js';
 import { EffectManager } from './EffectManager.js';
 import { Particles } from './Particles.js';
 import { POWERUP_TYPES } from './types/index.js';
+import { StunnedEffect } from './types/Bomb.js';
 
 /**
  * Sistema de power-ups. Game solo le avisa: fixedUpdate / update / use / reset.
  *
  * También funciona como "contexto" para cada power-up (ctx), exponiendo:
  *   scene, track, cars, effects, particles,
- *   spawn(entity), rivalOf(car), tryAffect(target, { strong }), explosion(pos, scale)
+ *   spawn(entity), rivalOf(car), tryAffect(target, { strong }), explosion(pos, scale),
+ *   blast(target, dir, cfg)
  *
  * Entidades del mundo (bombas, manchas de aceite, explosiones) implementan:
  *   fixedUpdate(dt) → false para terminar · update(dt) · dispose()
@@ -25,14 +27,19 @@ export class PowerUpManager {
     this.effects = new EffectManager(this);
     this.inventories = new Map(cars.map((c) => [c, new PlayerInventory()]));
     this.entities = [];
+    this.nextId = 0;
     this.time = 0;
     this.onPickup = null; // (car, type) → void, opcional (HUD)
     this.enabled = true;
+    this.boxes = [];
+    this.setAmount('normal');
+  }
 
-    this.boxes = POWERUP_CONFIG.itemBoxes.positions.map((p, i) => {
-      const q = track.path.pointAt(track.sOf(p.at), p.offset);
-      return new ItemBox(scene, q.x, q.y, q.z, i * 0.7);
-    });
+  /** Nuevos autos (al rearmar los jugadores): inventarios y efectos desde cero. */
+  setCars(cars) {
+    this.effects.clear();
+    this.cars = cars;
+    this.inventories = new Map(cars.map((c) => [c, new PlayerInventory()]));
   }
 
   inventory(car) {
@@ -43,10 +50,26 @@ export class PowerUpManager {
     return this.enabled ? this.boxes.filter((b) => b.active).length : 0;
   }
 
-  /** Partida "sin objetos": las cajas desaparecen y no se puede recoger nada. */
-  setEnabled(on) {
-    this.enabled = on;
-    for (const box of this.boxes) box.group.visible = on && box.active;
+  /**
+   * Cantidad de power-ups: 'off' (sin objetos) | 'few' | 'normal' | 'many'
+   * (ver POWERUP_CONFIG.itemBoxes: qué cajas aparecen y cada cuánto reaparecen).
+   */
+  setAmount(amount) {
+    this.enabled = amount !== 'off';
+    const level = this.enabled ? amount : 'normal';
+    if (level !== this.level) {
+      this.level = level;
+      for (const box of this.boxes) box.dispose();
+      const B = POWERUP_CONFIG.itemBoxes;
+      const respawn = B.amounts[level].respawnTime;
+      this.boxes = B.positions
+        .filter((p) => p.in.includes(level))
+        .map((p, i) => {
+          const q = this.track.path.pointAt(this.track.sOf(p.at), p.offset);
+          return new ItemBox(this.scene, q.x, q.y, q.z, i * 0.7, respawn);
+        });
+    }
+    for (const box of this.boxes) box.group.visible = this.enabled && box.active;
   }
 
   /** Usa el objeto del jugador, si tiene. */
@@ -72,8 +95,24 @@ export class PowerUpManager {
   // ------------------------------------------------------------ API para power-ups
 
   spawn(entity) {
+    entity.netId = ++this.nextId; // para identificarla en el online
     this.entities.push(entity);
     return entity;
+  }
+
+  /** Para el misil: el auto más cercano que va adelante en la carrera (si no hay, el más cercano). */
+  targetAhead(car) {
+    let best = null;
+    let bestGap = Infinity;
+    for (const c of this.cars) {
+      if (c === car || !c.alive) continue;
+      const gap = c.progress - car.progress;
+      if (gap > 0 && gap < bestGap) {
+        bestGap = gap;
+        best = c;
+      }
+    }
+    return best ?? this.rivalOf(car);
   }
 
   /** Rival más cercano vivo (con 2 jugadores, el otro). */
@@ -101,7 +140,26 @@ export class PowerUpManager {
     return true;
   }
 
+  /**
+   * Golpe de explosión (bomba, misil): frena al auto, lo empuja en `dir` (horizontal, normalizada),
+   * lo hace volar dando una vuelta y lo deja aturdido hasta un rato después de aterrizar.
+   * cfg: { speedKept, pushForce, launchSpeed, turns, spin, stunDuration }
+   * La resistencia del piloto (target.toughness) achica el empujón, la frenada y el aturdimiento.
+   */
+  blast(target, dir, cfg) {
+    const t = target.toughness ?? 1;
+    target.velocity.multiplyScalar(1 - (1 - cfg.speedKept) * t);
+    target.velocity.x += dir.x * cfg.pushForce * t;
+    target.velocity.z += dir.z * cfg.pushForce * t;
+    target.spin += (Math.random() < 0.5 ? -1 : 1) * cfg.spin;
+    // Gira hacia el lado al que lo empuja la explosión (izquierda del auto = (cos h, -sin h))
+    const left = dir.x * Math.cos(target.heading) - dir.z * Math.sin(target.heading);
+    const air = target.launch(cfg.launchSpeed, cfg.turns, left >= 0 ? 1 : -1);
+    this.effects.add(target, StunnedEffect, air + cfg.stunDuration * t);
+  }
+
   explosion(pos, scale = 1) {
+    this.onExplosion?.(pos, scale); // online: el anfitrión se lo avisa a los invitados
     const y = pos.y ?? 0;
     this.particles.burst({ x: pos.x, y: y + 0.6, z: pos.z }, Math.round(28 * scale), { color: '#ff9f1c', speed: 12 * scale, up: 8 * scale, size: 0.45 * scale, gravity: 14 });
     this.particles.burst({ x: pos.x, y: y + 0.6, z: pos.z }, Math.round(14 * scale), { color: '#ffe14d', speed: 7 * scale, up: 5, size: 0.35 * scale });
@@ -140,6 +198,17 @@ export class PowerUpManager {
     }
 
     this.effects.fixedUpdate(dt, this.cars);
+  }
+
+  /** Invitado online: solo avanza lo puramente visual que vive en este equipo (destellos de explosiones). */
+  stepLocalVisuals(dt) {
+    for (let i = this.entities.length - 1; i >= 0; i--) {
+      const e = this.entities[i];
+      if (e.fixedUpdate(dt) === false) {
+        e.dispose();
+        this.entities.splice(i, 1);
+      }
+    }
   }
 
   update(dt) {

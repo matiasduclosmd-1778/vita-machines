@@ -1,7 +1,10 @@
-# No hace falta subir esto a Vercel (el build usa src/assets/models/corolla.glb)
+# No hace falta subir esto a Vercel (el build usa los modelos optimizados de src/assets/models/)
 node_modules
 dist
 2023_toyota_corolla_hybrid.glb
+clio_2.glb
+peugeot_partner_tepee.glb
+vita-machines-seleccion.zip
 CDesign
 *.png
 .DS_Store

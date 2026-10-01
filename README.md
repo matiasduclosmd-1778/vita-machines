@@ -11,18 +11,46 @@ npm run dev
 
 ## Menús (HUB)
 
-Basados en `CDesign/VitaMachines HUB.html`. Flujo: **Carga → Inicio → Crear partida → carrera**.
+Basados en `CDesign/VitaMachines HUB.html`. Flujo local: **Carga → (nombre) → Inicio → Crear partida → Elegí tu piloto → carrera**. Online: ver [Online](#online).
 
-- **Crear partida**: nombre, modo Carrera, mapa El Escritorio, rival y power-ups sí/no. Los otros modos y mapas figuran como *próximamente*.
-  - **VS CPU**: un jugador (WASD + Espacio) contra la computadora, en Fácil / Normal / Difícil.
+- **Nombre**: obligatorio la primera vez que se entra; se cambia desde el inicio («✎ Cambiar nombre»).
+- **Crear partida**: nombre, modo Carrera, mapa El Escritorio, rival, vueltas (5, 8 o 10) y power-ups (No, Pocos, Medios o Muchos).
+- **Elegí tu piloto**: cada jugador elige con sus teclas de girar y confirma con la de usar objeto (o con el mouse, el jugador 1); `ESC` deshace la confirmación. Con los dos listos, el jugador 1 arranca. Si eligen el mismo piloto, el auto del jugador 2 sale con su color. Los otros modos y mapas figuran como *próximamente*.
+  - **VS CPU**: un jugador (WASD + Espacio) contra la computadora, en Fácil / Normal / Difícil. La CPU elige un piloto al azar distinto del tuyo.
   - **VS Local**: dos jugadores en el mismo teclado.
 - **Teclado**: reasignación real de las teclas de ambos jugadores (se intercambian si ya están en uso).
 - **Configuración**: calidad gráfica, sombras, resolución interna, efecto miniatura, pantalla completa, brillo, tiempo fuera de pantalla y panel de debug.
-- **Unirse al lobby / Lobby**: vista previa con datos de ejemplo (el multijugador online todavía no existe).
-- Los ajustes y las teclas se guardan en el navegador (`localStorage`).
+- **Jugar online**: lista de lobbies públicos, unirse con código o crear un lobby (ver [Online](#online)).
+- Los ajustes, las teclas y los últimos pilotos elegidos se guardan en el navegador (`localStorage`).
 - Durante la carrera: `ESC` pausa (continuar, reiniciar o volver al menú).
 
 Código en `src/ui/` (`Menu.js`, `menu.css`, `Settings.js`, tipografías en `src/ui/fonts/`); la ilustración de fondo está en `public/ui/street.jpg`.
+
+## Online
+
+Hasta 6 jugadores, cada uno en su computadora. Usa **Supabase Realtime** (canales broadcast, sin base de datos) del proyecto `vita-machines` (organización CUPULABS). Las variables están en `.env.local` y en Vercel:
+
+```
+VITE_SUPABASE_URL=https://<proyecto>.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_…   # clave pública: puede ir en el navegador
+```
+
+Sin esas variables (o con `?net=local` en la URL) el online funciona entre **pestañas del mismo navegador** (BroadcastChannel), útil para probar.
+
+Flujo:
+1. **Crear lobby**: nombre, público (aparece en la lista) o privado (solo con el código de 6 letras), vueltas y power-ups.
+2. **Lobby**: jugadores, chat y código. Cada invitado pone **Listo**; cuando están todos (y hay al menos 2), al anfitrión se le habilita **Seleccionar piloto**.
+3. **Elegí tu piloto**: cada uno elige y confirma (se ve qué eligió cada uno). Se puede repetir piloto: el auto repetido sale con el color del lugar del jugador. Cuando confirman todos, arranca la carrera.
+4. **Carrera**: cámara compartida como en local (el que queda fuera de pantalla 3 s queda eliminado; el último en pie o el primero en completar las vueltas gana). `ESC` no pausa: abre un menú para seguir o salir. Se maneja con WASD o flechas y se usa el objeto con Espacio o Enter.
+5. Al terminar, el anfitrión vuelve a todos al **lobby** (los invitados tienen que volver a poner Listo).
+
+Cómo funciona (`src/net/`):
+- `transport.js`: canales de mensajes (Supabase o BroadcastChannel).
+- `Online.js`: lista de lobbies (cada anfitrión se anuncia cada 2 s en un canal común) y sesión de lobby. El **anfitrión es la autoridad**: guarda el estado del lobby (jugadores, listos, pilotos, fase) y lo reenvía; detecta desconexiones por latido (`online.dropTimeout`).
+- `NetRace.js`: en la carrera el anfitrión simula todo y manda el estado `online.snapshotRate` veces por segundo (autos, cajas, objetos en pista, efectos y eventos como explosiones). Los invitados no simulan: muestran ese estado con `online.interpolationDelay` de retraso, interpolando, y mandan sus controles cuando cambian. Por eso el auto propio de un invitado responde con un poco de demora (lo que tarda la ida y vuelta).
+- `OnlineController.js`: une la sesión con el menú (`src/ui/OnlineScreens.js`) y el juego.
+- Si el anfitrión se va, el lobby se cierra para todos. Un invitado que se desconecta en carrera queda eliminado.
+- Plan gratis de Supabase: ~100 mensajes por segundo y 200 conexiones por proyecto; con 6 jugadores una carrera usa ~12 estados/s del anfitrión más los controles de cada uno.
 
 ## Controles
 
@@ -39,6 +67,8 @@ Código en `src/ui/` (`Menu.js`, `menu.css`, `Settings.js`, tipografías en `src
 
 ## Reglas
 
+Gana el primero que completa las vueltas elegidas (`GAME_CONFIG.race`), o el que sigue en pantalla si el otro queda eliminado.
+
 Cada jugador está en uno de tres estados: `NORMAL`, `OUT_OF_SCREEN` o `ELIMINATED`.
 Si sale de la zona segura (el rectángulo interno definido por `camera.safeMargin`) pasa a `OUT_OF_SCREEN` y empieza un countdown 3‑2‑1. Si vuelve antes, se cancela; si no, queda eliminado (su auto frena hasta detenerse) y gana el otro.
 La cámara nunca se aleja más que `camera.maxDistance` para salvar al que va atrás.
@@ -49,17 +79,42 @@ La cámara nunca se aleja más que `camera.maxDistance` para salvar al que va at
 
 ## Power-ups
 
-Hay 8 cajas "?" en la pista (`POWERUP_CONFIG.itemBoxes.positions`). Al tocar una, el jugador recibe un objeto al azar si su slot está vacío (`EMPTY` → `HAS_ITEM`); si ya tiene uno, la caja queda para el otro. Las cajas reaparecen a los `respawnTime` segundos.
+Cajas "?" en la pista según la cantidad elegida (`POWERUP_CONFIG.itemBoxes`): **Pocos** 4 cajas que reaparecen a los 10 s, **Medios** 8 cajas a los 6 s, **Muchos** 19 cajas a los 3,5 s. Cada posición indica en qué cantidades aparece (`in`). Al tocar una, el jugador recibe un objeto al azar si su slot está vacío (`EMPTY` → `HAS_ITEM`); si ya tiene uno, la caja queda para el otro.
 
 | Objeto | Efecto |
 |---|---|
 | 🚀 TURBO | Más aceleración y velocidad máxima durante unos segundos |
-| 💣 BOMB | Proyectil hacia adelante: al impactar empuja, hace girar y aturde al rival; contra una pared desaparece |
+| 💣 BOMB | Proyectil hacia adelante: al impactar hace volar al rival dando una vuelta en el aire y lo deja aturdido un rato después de aterrizar; contra una pared desaparece |
+| 🎯 MISSILE | Misil teledirigido: sigue la pista y, cuando tiene al rival cerca, va directo hacia él (una mira roja marca al perseguido). Al impactar lo frena casi del todo y lo hace volar más alto que la bomba, con una vuelta en el aire y aturdimiento al aterrizar; choca contra paredes |
 | 🛢️ OIL | Mancha detrás del auto: quien la pisa pierde grip y derrapa (el que la deja es inmune al principio) |
 | 🧲 MAGNET | Atrae moderadamente al rival si está a menos de `maxDistance` |
-| 🛡️ SHIELD | Cúpula que bloquea bomba, aceite e imán (una bomba la rompe) |
+| 🛡️ SHIELD | Cúpula que bloquea bomba, misil, aceite e imán (una bomba o un misil la rompen) |
 
-Para agregar uno nuevo: crear `src/powerups/types/MiObjeto.js` con `{ id, name, icon, color, config, use(ctx, car) }`, agregar su bloque en `POWERUP_CONFIG` y registrarlo en `src/powerups/types/index.js`. Los efectos temporales extienden `Effect` (`src/powerups/EffectManager.js`) y modifican `car.mods` (aceleración, velocidad máxima, grip, dirección, acelerador).
+Para agregar uno nuevo: crear `src/powerups/types/MiObjeto.js` con `{ id, name, icon, color, config, use(ctx, car) }`, agregar su bloque en `POWERUP_CONFIG` y registrarlo en `src/powerups/types/index.js`. Las explosiones que golpean un auto usan `ctx.blast(target, dir, cfg)` (frena, empuja, lo hace volar con `car.launch` y lo aturde). Los efectos temporales extienden `Effect` (`src/powerups/EffectManager.js`) y modifican `car.mods` (aceleración, velocidad máxima, grip, dirección, acelerador).
+
+## Pilotos y autos
+
+Cada piloto (`GAME_CONFIG.drivers`) maneja su auto con su pintura:
+
+| Piloto | Auto | Velocidad | Aceleración | Manejo | Resistencia |
+|---|---|---|---|---|---|
+| El Coco | Toyota Corolla · azul medianoche | 9 | 7 | 5 | 7 |
+| Dj Domono | Peugeot Partner · blanca | 6 | 5 | 6 | 10 |
+| Dr Faxo | Renault Clio · gris topo | 7 | 9 | 9 | 5 |
+
+Las stats cambian el manejo respecto de la base (7) según `GAME_CONFIG.driverStats`: Velocidad → velocidad máxima, Aceleración → empuje, Manejo → giro y grip, Resistencia → cuánto lo empujan, frenan y aturden la bomba y el misil. Los km/h de la tarjeta son solo de muestra. Retratos e imágenes de los autos en `src/assets/pilots/` (WebP).
+
+Los modelos 3D están en `GAME_CONFIG.cars` (`src/config.js`): archivo, material que se repinta con el color del piloto, corrección de orientación y ajustes de materiales por nombre. Los modelos se cargan en paralelo al iniciar (`src/world/CarModel.js`); si alguno está riggeado (piezas ubicadas por huesos, como el Partner) se hornea su pose en una malla común.
+
+Para agregar uno:
+
+```bash
+npx @gltf-transform/cli optimize original.glb src/assets/models/nuevo.glb \
+  --compress meshopt --texture-compress webp --texture-size 1024 --palette false \
+  --simplify-ratio 0.3 --simplify-error 0.001
+```
+
+(`--palette false` es importante: sin eso se fusionan los materiales y no se puede identificar la pintura.) Después, sumar su entrada en `GAME_CONFIG.cars`.
 
 ## Gráficos
 
@@ -80,13 +135,14 @@ src/
   CameraRig.js        Cámara compartida: encuadre, zoom acotado, prioridad al líder
   OffscreenTracker.js Estados OUT_OF_SCREEN / countdown / eliminación
   Debug.js            Panel de debug, zona segura en pantalla, marcadores y ayudas 3D
+  net/                Online: transporte, lobbies, sincronización de la carrera (ver Online)
   powerups/
     PowerUpManager.js Cajas, inventarios, entidades del mundo y efectos; contexto para cada power-up
     ItemBox.js        Caja flotante con respawn
     PlayerInventory.js Slot único EMPTY / HAS_ITEM
     EffectManager.js  Efectos temporales por auto (clase base Effect)
     Particles.js      Partículas compartidas (un InstancedMesh)
-    types/            Turbo, Bomb, Oil, Magnet, Shield + registro (index.js)
+    types/            Turbo, Bomb, Missile, Oil, Magnet, Shield + registro (index.js)
   HUD.js / style.css  Interfaz HTML/CSS
   Input.js            Teclado
 ```
@@ -111,5 +167,8 @@ src/
 
 ## Créditos
 
-- Modelo del auto: [«2023 Toyota Corolla Hybrid»](https://sketchfab.com/3d-models/2023-toyota-corolla-hybrid-cd2f6b34664442ad906a40bd00136881) por [tonielpro520](https://sketchfab.com/tonielpro520), licencia [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). Modificado: repintado (azul medianoche / rojo), materiales ajustados y optimizado con gltf-transform (`src/assets/models/corolla.glb`).
+- Modelos de los autos (modificados: repintados con el color de cada jugador, materiales ajustados y optimizados con gltf-transform, en `src/assets/models/`):
+  - [«2023 Toyota Corolla Hybrid»](https://sketchfab.com/3d-models/2023-toyota-corolla-hybrid-cd2f6b34664442ad906a40bd00136881) por [tonielpro520](https://sketchfab.com/tonielpro520), licencia [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) (`corolla.glb`).
+  - [«Clio 2»](https://sketchfab.com/3d-models/clio-2-2c4d2cb0cda14dc9b2ddcd7d2b3a1f95) por [Nardeol](https://sketchfab.com/Nardeol), licencia [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) (`clio.glb`).
+  - [«Peugeot Partner Tepee»](https://sketchfab.com/3d-models/peugeot-partner-tepee-403c297a63424f959906043cd6942cee) por [KOElkast1007](https://sketchfab.com/koelkastasbers), licencia [Sketchfab Standard](https://sketchfab.com/licenses) (`peugeot.glb`).
 - Tipografías Lilita One, Nunito y JetBrains Mono (SIL Open Font License, ver `src/ui/fonts/LICENSE.md`), incluidas desde el diseño de `CDesign/`.

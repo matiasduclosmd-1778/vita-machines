@@ -31,6 +31,7 @@ export const GAME_CONFIG = {
       short: 'P1',
       color: '#4d8bff', // color de interfaz (HUD, marcadores)
       paint: '#131c45', // pintura del auto: azul medianoche
+      driver: 'coco', // piloto por defecto (se elige en "Elegí tu piloto")
       controlsLabel: 'WASD',
       useLabel: 'Espacio',
       controls: { up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD', use: 'Space' },
@@ -40,9 +41,126 @@ export const GAME_CONFIG = {
       short: 'P2',
       color: '#ff5a36',
       paint: '#c8321f',
+      driver: 'faxo',
       controlsLabel: 'Flechas',
       useLabel: 'Enter',
       controls: { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight', use: 'Enter' },
+    },
+  ],
+
+  // Pilotos de "Elegí tu piloto". Cada uno maneja su auto (`car`, ver `cars`) con su pintura.
+  //  stats (0–10) cambian el manejo respecto de la base, ver `driverStats` · kmh: solo para mostrar
+  //  portrait / carImage: imágenes en src/assets/pilots/ · w, t, l: tamaño y posición del retrato
+  //  c1, c2: degradé del fondo de la tarjeta
+  drivers: [
+    {
+      id: 'coco',
+      name: 'El Coco',
+      car: 'corolla',
+      carLabel: 'Toyota Corolla',
+      paint: '#1f2c63',
+      paintName: 'Azul medianoche',
+      quip: 'Mecánico de barrio. Le sacó cada caballo de fuerza a mano.',
+      stats: { vel: 9, acel: 7, man: 5, res: 7 },
+      kmh: 198,
+      portrait: 'el-coco.webp',
+      carImage: 'el-coco-toyota-corolla.webp',
+      w: '112%', t: '0%', l: '52%',
+      c1: '#5c7be0', c2: '#1f2c63',
+    },
+    {
+      id: 'domono',
+      name: 'Dj Domono',
+      car: 'partner',
+      carLabel: 'Peugeot Partner',
+      paint: '#f1f1ee',
+      paintName: 'Blanca',
+      quip: 'Llega a todas las fiestas con el equipo atrás. Nada lo frena.',
+      stats: { vel: 6, acel: 5, man: 6, res: 10 },
+      kmh: 162,
+      portrait: 'dj-domono.webp',
+      carImage: 'dj-domono-peugeot-partner.webp',
+      w: '74%', t: '2%', l: '36%',
+      c1: '#7f9a63', c2: '#2f4a2c',
+    },
+    {
+      id: 'faxo',
+      name: 'Dr Faxo',
+      car: 'clio',
+      carLabel: 'Renault Clio Mío',
+      paint: '#5e5a55',
+      paintName: 'Gris topo',
+      quip: 'Liviano y rápido. Dobla antes de que dispare el flash.',
+      stats: { vel: 7, acel: 9, man: 9, res: 5 },
+      kmh: 171,
+      portrait: 'dr-faxo.webp',
+      carImage: 'dr-faxo-renault-clio.webp',
+      w: '64%', t: '3%', l: '36%',
+      c1: '#a7e86e', c2: '#45423e',
+    },
+  ],
+
+  // Cuánto cambia el manejo cada punto de stat por encima o por debajo de `base`
+  driverStats: {
+    base: 7,
+    maxSpeed: 0.025, // Velocidad: +2.5 % de velocidad máxima por punto
+    acceleration: 0.04, // Aceleración: +4 % de empuje por punto
+    handling: 0.03, // Manejo: +3 % de giro y de grip por punto
+    toughness: 0.06, // Resistencia: −6 % de empujón, frenada y aturdimiento por bomba/misil por punto
+  },
+
+  // Modelos de los autos. Todos tienen la misma física; el manejo lo cambian las stats del piloto.
+  //  file: modelo optimizado en src/assets/models/ · paint: material que se repinta con el color del jugador
+  //  yawOffset: corrección si el frente queda al revés (Math.PI) · materials: ajustes por nombre de material
+  cars: [
+    {
+      id: 'corolla',
+      name: 'Corolla',
+      file: 'corolla.glb',
+      paint: 'Carro_Pintura',
+      yawOffset: 0,
+      // Los materiales vienen sin metal ni brillo (se ven de plástico); nombres en portugués
+      materials: [
+        [/Espelho/i, { color: '#dfe3ea', metalness: 1, roughness: 0.05 }], // espejos
+        [/Cromado|Roda/i, { metalness: 1, roughness: 0.2 }], // cromados y llantas
+        [/Vidros_Vermelhos|Refletor_Lanterna/i, { emissive: '#ff1a1a', emissiveIntensity: 1.2 }], // luces traseras
+        [/Vidros/i, { color: '#0b0f16', metalness: 0.6, roughness: 0.04, opacity: 0.65 }], // vidrios
+        [/Farol/i, { metalness: 0.9, roughness: 0.15 }], // reflectores de los faros
+        [/Laranja/i, { emissive: '#ff7a00', emissiveIntensity: 0.4 }], // giros
+        [/Freio/i, { metalness: 0.7, roughness: 0.35 }], // frenos
+        [/Pneu/i, { roughness: 0.92 }], // neumáticos
+        [/Plastico|Preto|Interno/i, { roughness: 0.65 }], // plásticos y tapizado
+      ],
+    },
+    {
+      id: 'clio',
+      name: 'Clio',
+      file: 'clio.glb',
+      paint: 'Tle_rouge',
+      yawOffset: 0,
+      // Nombres en francés
+      materials: [
+        [/^Vitres/i, { color: '#0b0f16', metalness: 0.6, roughness: 0.04 }], // vidrios
+        [/^Phare\.001/i, { color: '#ff1a1a', metalness: 0.2, roughness: 0.2, emissive: '#ff1a1a', emissiveIntensity: 1.2 }], // luces traseras
+        [/^Phare$/i, { color: '#fff4dc', metalness: 0.2, roughness: 0.1, emissive: '#fff1c2', emissiveIntensity: 1.5 }], // faros
+        [/Enjoliveurs/i, { metalness: 1, roughness: 0.2 }], // tazas de las ruedas
+        [/Dchet|Plastique|Material\.002/i, { roughness: 0.7 }], // gomas y plásticos
+      ],
+    },
+    {
+      id: 'partner',
+      name: 'Partner',
+      file: 'peugeot.glb',
+      paint: 'carpaint',
+      yawOffset: 0,
+      materials: [
+        [/^windows$/i, { color: '#0b0f16', metalness: 0.6, roughness: 0.04 }], // vidrios
+        [/^vitre$/i, { color: '#0b0f16', metalness: 0.6, roughness: 0.04, opacity: 0.65 }],
+        [/redglass|^rouge/i, { emissive: '#ff1a1a', emissiveIntensity: 1.2 }], // luces traseras
+        [/clignotant/i, { color: '#ff7a00', emissive: '#ff7a00', emissiveIntensity: 0.4 }], // giros
+        [/smallspecmap/i, { color: '#e8e8e8', metalness: 0.9, roughness: 0.15 }], // faros
+        [/mirror|^gris$/i, { metalness: 1, roughness: 0.15 }], // espejos y cromados
+      ],
     },
   ],
 
@@ -77,11 +195,10 @@ export const GAME_CONFIG = {
   vehicle: {
     length: 2.4,
     width: 1.3,
-    // Modelo 3D del auto (si falla la carga se usa el auto hecho con primitivas)
+    // Modelos 3D de los autos (ver `cars`; si falla la carga se usa el auto hecho con primitivas)
     model: {
       enabled: true,
       length: 2.8, // largo al que se escala el modelo (el auto de colisión mide `length`)
-      yawOffset: 0, // corrección en radianes si el frente queda mirando al revés (Math.PI)
     },
     // Colisión: dos círculos a lo largo del auto (adelante y atrás).
     colliderRadius: 0.68,
@@ -180,6 +297,34 @@ export const GAME_CONFIG = {
   },
 
   // Piloto de la computadora (modo VS CPU). Una entrada por dificultad.
+  // Online (Supabase Realtime, ver src/net/). El anfitrión simula la carrera y manda el estado a los demás.
+  online: {
+    maxPlayers: 6,
+    nameMin: 2,
+    nameMax: 16,
+    snapshotRate: 12, // estados por segundo que manda el anfitrión (Supabase gratis: ~100 mensajes/s por proyecto)
+    inputRate: 15, // máximo de envíos de controles por segundo de cada invitado (solo cuando cambian)
+    interpolationDelay: 0.15, // los invitados muestran el estado con este retraso para interpolar sin saltos (s)
+    adTimeout: 7, // un lobby que deja de anunciarse desaparece de la lista (s)
+    joinTimeout: 6,
+    dropTimeout: 8, // sin noticias de un jugador (o del anfitrión) durante este tiempo → desconectado
+    // Color de interfaz y pintura de respaldo de cada lugar del lobby (la pintura se usa si el piloto se repite)
+    slots: [
+      { color: '#4d8bff', paint: '#131c45' },
+      { color: '#ff5a36', paint: '#c8321f' },
+      { color: '#5cc24a', paint: '#2f7d32' },
+      { color: '#ffc93c', paint: '#d99a00' },
+      { color: '#b06bff', paint: '#5b2a9e' },
+      { color: '#4fc3e8', paint: '#1b8fb0' },
+    ],
+  },
+
+  // Carrera: gana el primero que completa las vueltas (o el último que queda en pantalla)
+  race: {
+    lapOptions: [5, 8, 10], // opciones de "Crear partida"
+    laps: 5, // por defecto
+  },
+
   ai: {
     cpuName: 'CPU',
     difficulties: {
@@ -234,16 +379,35 @@ export const GAME_CONFIG = {
 // weight = probabilidad relativa de salir de una caja (0 = desactivado).
 export const POWERUP_CONFIG = {
   itemBoxes: {
-    respawnTime: 6, // segundos hasta que una caja recogida reaparece
     pickupRadius: 1.6,
-    // Posiciones manuales: at = fracción del recorrido, offset = lateral (+izq)
-    // Posiciones manuales: at = punto aproximado sobre la pista, offset = lateral (+izq)
+    // Cantidad de power-ups elegida en "Crear partida": qué cajas aparecen y cada cuánto reaparecen
+    amounts: {
+      few: { label: 'Pocos', respawnTime: 10 },
+      normal: { label: 'Medios', respawnTime: 6 },
+      many: { label: 'Muchos', respawnTime: 3.5 },
+    },
+    // Posiciones manuales: at = punto aproximado sobre la pista, offset = lateral (+izq),
+    // in = cantidades en las que aparece la caja
     positions: [
-      { at: [20, 90], offset: -3.5 }, { at: [20, 90], offset: 3.5 }, // recta de largada
-      { at: [128, -65], offset: 0 }, // después del precipicio, antes de subir
-      { at: [-66, -95], offset: -3 }, { at: [-66, -95], offset: 3 }, // tras el aterrizaje: ¿atajo o rodeo?
-      { at: [-116, -10], offset: 0 }, // premio del rodeo largo
-      { at: [-50, 13], offset: -2.5 }, { at: [-50, 13], offset: 2.5 }, // entrada al sector técnico
+      // Medios: las 8 originales (en Muchos también)
+      { at: [20, 90], offset: -3.5, in: ['normal', 'many'] }, { at: [20, 90], offset: 3.5, in: ['normal', 'many'] }, // recta de largada
+      { at: [128, -65], offset: 0, in: ['few', 'normal', 'many'] }, // después del precipicio, antes de subir
+      { at: [-66, -95], offset: -3, in: ['normal', 'many'] }, { at: [-66, -95], offset: 3, in: ['normal', 'many'] }, // tras el aterrizaje: ¿atajo o rodeo?
+      { at: [-116, -10], offset: 0, in: ['normal', 'many'] }, // premio del rodeo largo
+      { at: [-50, 13], offset: -2.5, in: ['normal', 'many'] }, { at: [-50, 13], offset: 2.5, in: ['normal', 'many'] }, // entrada al sector técnico
+      // Pocos: una sola caja al centro donde Medios tiene dos (en Muchos completan filas de tres)
+      { at: [20, 90], offset: 0, in: ['few', 'many'] },
+      { at: [-66, -95], offset: 0, in: ['few', 'many'] },
+      { at: [-50, 13], offset: 0, in: ['few', 'many'] },
+      // Muchos: tramos seguros sin obstáculos, lejos de las demás cajas
+      { at: [87, 79], offset: 0, in: ['many'] },
+      { at: [120, 43], offset: 2, in: ['many'] },
+      { at: [142, 1], offset: -2, in: ['many'] },
+      { at: [108, -92], offset: 0, in: ['many'] },
+      { at: [40, -87], offset: 0, in: ['many'] },
+      { at: [-120, -70], offset: 0, in: ['many'] },
+      { at: [-88, 52], offset: 2, in: ['many'] },
+      { at: [-115, 83], offset: -2, in: ['many'] },
     ],
   },
 
@@ -260,12 +424,40 @@ export const POWERUP_CONFIG = {
     lifetime: 2.2, // segundos antes de desaparecer
     maxDistance: 70,
     hitRadius: 1.1,
-    pushForce: 16, // empujón al impactar (u/s)
-    upKick: 14, // salto visual de la carrocería
-    spin: 5, // giro que provoca (rad/s)
-    stunDuration: 1.1, // pérdida de control
+    speedKept: 0.5, // fracción de la velocidad que conserva el auto golpeado
+    pushForce: 7, // empujón al impactar (u/s)
+    launchSpeed: 14, // lo hace volar (u/s hacia arriba: ~0.7 s en el aire)
+    turns: 1, // vueltas de barril en el aire
+    spin: 3, // giro que provoca (rad/s)
+    stunDuration: 0.7, // pérdida de control después de aterrizar
     stunSteer: 0.2, // fracción de dirección que queda durante el aturdimiento
     stunGrip: 0.3, // fracción de grip durante el aturdimiento
+  },
+
+  missile: {
+    weight: 0.8,
+    launchSpeed: 22, // sale despacio del auto…
+    speed: 46, // …y acelera hasta esta velocidad
+    acceleration: 60,
+    cornerSpeed: 24, // en curvas cerradas frena hasta esta velocidad…
+    braking: 120,
+    sharpTurnAngle: 0.35, // …cuando el objetivo queda a más de este ángulo (rad)
+    turnRate: 3.2, // giro máximo del guiado (rad/s)
+    armTime: 0.25, // segundos en línea recta antes de empezar a guiarse
+    lookAhead: 9, // cuánto adelante en la pista apunta mientras busca al rival
+    directRange: 22, // más cerca que esto va directo hacia el rival…
+    directCone: 0.5, // …si está adelante (coseno del ángulo: 0.5 = ±60°)
+    dodgeRange: 12, // distancia a la que empieza a esquivar obstáculos
+    dodgeMargin: 0.8, // espacio extra que deja al pasar al lado de un obstáculo
+    hover: 0.9, // altura de vuelo sobre la pista
+    lifetime: 6,
+    hitRadius: 1.1,
+    speedKept: 0.3, // fracción de la velocidad que conserva el auto golpeado
+    pushForce: 6,
+    launchSpeed: 17, // vuela más alto que con la bomba (~0.8 s en el aire)
+    turns: 1,
+    spin: 4,
+    stunDuration: 0.9, // pérdida de control después de aterrizar
   },
 
   oil: {

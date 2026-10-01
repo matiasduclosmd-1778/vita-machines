@@ -4,8 +4,9 @@ import { Menu } from './ui/Menu.js';
 import { loadSettings } from './ui/Settings.js';
 import { GAME_CONFIG } from './config.js';
 import { loadCarModel } from './world/CarModel.js';
-// Modelo 3D del auto, optimizado con gltf-transform (Vite lo copia al build y devuelve su URL)
-import carModelUrl from './assets/models/corolla.glb?url';
+import { OnlineController } from './net/OnlineController.js';
+// Modelos 3D de los autos, optimizados con gltf-transform (Vite los copia al build y devuelve sus URLs)
+const MODEL_URLS = import.meta.glob('./assets/models/*.glb', { query: '?url', import: 'default', eager: true });
 
 const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r()));
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -26,12 +27,17 @@ const menu = new Menu(document.getElementById('menu'), settings, {
     menu.showHome();
   },
 });
+// Online: lobbies, elección de piloto y carrera sincronizada (ver src/net/)
+const online = new OnlineController(menu, () => game, settings);
+menu.online = online;
 
 async function boot() {
   const started = performance.now();
   menu.showLoading('CARGANDO CALLES…');
-  // El modelo del auto se descarga mientras se arma el resto
-  const carModel = GAME_CONFIG.vehicle.model.enabled ? loadCarModel(carModelUrl) : Promise.resolve(null);
+  // Los modelos de los autos se descargan (en paralelo) mientras se arma el resto
+  const carModels = GAME_CONFIG.vehicle.model.enabled
+    ? Promise.all(GAME_CONFIG.cars.map((spec) => loadCarModel(MODEL_URLS[`./assets/models/${spec.file}`], spec)))
+    : Promise.resolve([]);
   await document.fonts.load('40px "Lilita One"').catch(() => {});
   drawFavicon();
   menu.setProgress(0.12);
@@ -44,11 +50,13 @@ async function boot() {
       game.stop();
       menu.showHome();
     },
+    onOnlineMenu: () => menu.showOnlinePause(),
+    online: { back: () => online.backToLobby(), leave: () => online.leave() },
   });
   game.applySettings(settings);
   menu.setProgress(0.5);
-  const model = await carModel;
-  if (model) for (const car of game.cars) car.applyModel(model);
+  const models = (await carModels).filter(Boolean);
+  game.setCarModels(Object.fromEntries(models.map((m) => [m.id, m])));
   menu.setProgress(0.65);
   await nextFrame();
 
@@ -60,9 +68,11 @@ async function boot() {
   menu.setProgress(1);
   // La pantalla de carga se ve al menos un momento (y deja leer el consejo)
   await wait(Math.max(0, 1400 - (performance.now() - started)));
-  menu.showHome();
+  // El nombre del piloto es obligatorio: la primera vez se pide antes de llegar al inicio
+  if (settings.profile.name) menu.showHome();
+  else menu.showName({ required: true });
 
-  if (import.meta.env.DEV) Object.assign(window, { game, menu });
+  if (import.meta.env.DEV) Object.assign(window, { game, menu, online });
 }
 
 async function startRace(race) {

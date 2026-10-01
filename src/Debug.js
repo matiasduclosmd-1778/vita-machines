@@ -46,6 +46,11 @@ export class Debug {
     this.apply();
   }
 
+  dispose(scene) {
+    this.root.remove();
+    scene.remove(this.helpers);
+  }
+
   toggle() {
     this.enabled = !this.enabled;
     this.apply();

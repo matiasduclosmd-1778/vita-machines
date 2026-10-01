@@ -95,8 +95,8 @@ export class EffectManager {
           e.end();
         }
       }
-      // Recalcular multiplicadores desde cero
-      Object.assign(car.mods, DEFAULT_MODS);
+      // Recalcular multiplicadores desde los del piloto
+      Object.assign(car.mods, car.baseMods ?? DEFAULT_MODS);
       for (const e of list) e.modify(car.mods);
     }
   }

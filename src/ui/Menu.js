@@ -1,27 +1,20 @@
 import './menu.css';
-import { GAME_CONFIG } from '../config.js';
+import { GAME_CONFIG, POWERUP_CONFIG } from '../config.js';
 import { ACTIONS, RESERVED_KEYS, defaultSettings, keyLabel, saveSettings } from './Settings.js';
+import { OnlineScreens } from './OnlineScreens.js';
 
 const PLAYERS = GAME_CONFIG.players;
-const VERSION = 'v0.1.0 · Local · 2 jugadores';
+const VERSION = 'v0.2.0 · Local y online · hasta 6 jugadores';
 
 const TIPS = [
   'Llegá rápido a la rampa rayada: si vas lento, no alcanzás la plataforma.',
   'La regla del atajo no tiene barandas: es más corta, pero si caés perdés tiempo.',
   'Si quedás 3 segundos fuera de pantalla, quedás eliminado.',
-  'El escudo te protege de la bomba, el aceite y el imán.',
+  'El escudo te protege de la bomba, el misil, el aceite y el imán.',
+  'El misil 🎯 persigue al rival por la pista: lanzalo cuando lo tengas adelante.',
   'En el borde del escritorio no hay baranda: frená antes de la curva.',
   'El turbo sirve para recuperar terreno cuando la cámara te está dejando atrás.',
-];
-
-// Datos de ejemplo para las pantallas online (todavía no hay multijugador en red)
-const SAMPLE_LOBBIES = [
-  { name: 'Choques en la plaza', host: 'Chispa_99', mode: 'Choque total', map: 'Plaza Central', players: [5, 8], ping: 28 },
-  { name: 'Carrera nocturna', host: 'RuedaFeroz', mode: 'Carrera', map: 'Avenida Rota', players: [3, 6], ping: 41 },
-  { name: 'Solo novatos', host: 'Bache', mode: 'Carrera', map: 'Barrio Ladrillo', players: [2, 4], ping: 35 },
-  { name: 'Defensa del núcleo', host: 'ElFaro', mode: 'Núcleo', map: 'Plaza Central', players: [8, 8], ping: 22 },
-  { name: 'Torneo del barrio', host: 'Grúa', mode: 'Choque total', map: 'Avenida Rota', players: [6, 8], ping: 88 },
-  { name: 'Tranquis', host: 'Pistón', mode: 'Núcleo', map: 'Barrio Ladrillo', players: [1, 6], ping: 130 },
+  'Online: creá un lobby y pasales el código de 6 letras a tus amigos (hasta 6 jugadores).',
 ];
 
 const MODES = [
@@ -32,8 +25,39 @@ const MODES = [
 
 const DIFFICULTIES = GAME_CONFIG.ai.difficulties;
 const rivalText = (r) => (r.opponent === 'cpu' ? `CPU · ${DIFFICULTIES[r.difficulty].label}` : 'Local (2 jugadores)');
+const LAP_OPTIONS = GAME_CONFIG.race.lapOptions;
+const POWERUP_AMOUNTS = { off: 'No', ...Object.fromEntries(Object.entries(POWERUP_CONFIG.itemBoxes.amounts).map(([id, a]) => [id, a.label])) };
+const powerupsText = (r) => (r.powerups === 'off' ? 'Sin objetos' : POWERUP_AMOUNTS[r.powerups]);
+const DRIVERS = GAME_CONFIG.drivers;
+// Retratos y autos de los pilotos (Vite los optimiza y devuelve sus URLs)
+const PILOT_IMAGES = import.meta.glob('../assets/pilots/*.webp', { query: '?url', import: 'default', eager: true });
+const pilotImage = (file) => PILOT_IMAGES[`../assets/pilots/${file}`];
+const STAT_LABELS = { vel: 'Velocidad', acel: 'Aceleración', man: 'Manejo', res: 'Resistencia' };
 
-const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+export const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+/** Tarjetas de "Elegí tu piloto" (también las usa la versión online). p2Tag: texto de la etiqueta del segundo jugador. */
+export function pilotCardsHTML(p2Tag = 'J2') {
+  const bar = (v) => `<div class="vm-pk-bar">${Array.from({ length: 10 }, (_, i) => `<i class="${i < v ? 'on' : ''}"></i>`).join('')}</div>`;
+  return DRIVERS.map((d, i) => `
+            <article class="vm-pk-card" role="option" data-i="${i}" style="--c1:${d.c1};--c2:${d.c2};--paint:${d.paint};--w:${d.w};--t:${d.t};--l:${d.l}">
+              <div class="vm-pk-portrait">
+                <div class="vm-pk-tags"><span class="vm-pk-tag p1">J1</span><span class="vm-pk-tag p2">${p2Tag}</span></div>
+                <span class="vm-pk-ready">LISTO</span>
+                <img class="vm-pk-who" src="${pilotImage(d.portrait)}" alt="${esc(d.name)}">
+                <img class="vm-pk-car" src="${pilotImage(d.carImage)}" alt="${esc(d.carLabel)} ${esc(d.paintName.toLowerCase())}">
+              </div>
+              <div class="vm-pk-body">
+                <h2 class="vm-pk-name">${esc(d.name)}</h2>
+                <p class="vm-pk-ride">${esc(d.carLabel)} <span><i class="vm-pk-sw"></i>${esc(d.paintName)}</span></p>
+                <p class="vm-pk-quip">${esc(d.quip)}</p>
+                <dl class="vm-pk-stats">
+                  ${Object.entries(d.stats).map(([k, v]) => `
+                    <div class="vm-pk-stat ${k === 'vel' ? 'speed' : ''}"><dt>${STAT_LABELS[k]}</dt><dd>${bar(v)}</dd><dd class="vm-pk-val">${k === 'vel' ? `${d.kmh} km/h` : `${v}/10`}</dd></div>`).join('')}
+                </dl>
+              </div>
+            </article>`).join('');
+}
 
 /**
  * Menús del juego (HUB). Pantallas: carga, inicio, crear partida, unirse (vista previa),
@@ -49,7 +73,7 @@ export class Menu {
     this.root = root;
     this.settings = settings;
     this.cb = callbacks;
-    this.race = { name: 'Carrera en el escritorio', mode: 'race', map: 'desk', powerups: true, opponent: 'cpu', difficulty: 'normal' };
+    this.race = { name: 'Carrera en el escritorio', mode: 'race', map: 'desk', powerups: 'normal', laps: GAME_CONFIG.race.laps, opponent: 'cpu', difficulty: 'normal' };
     this.thumbs = { map: null, car: null };
     this.listening = null;
 
@@ -90,6 +114,12 @@ export class Menu {
     this.root.classList.remove('hidden');
     this.closeModal();
     this.back = back;
+    this.screenKey = null; // teclas propias de la pantalla (la de pilotos)
+    // Lo que dejó andando la pantalla anterior (lista de lobbies, avisos del lobby)
+    this.leaveScreen?.();
+    this.leaveScreen = null;
+    this.onlineUpdate = null;
+    this.onlineChat = null;
     this.layer.innerHTML = html;
     this.layer.firstElementChild?.classList.add('vm-enter');
     this.layer.querySelectorAll('[data-back]').forEach((b) => b.addEventListener('click', () => back?.()));
@@ -102,6 +132,11 @@ export class Menu {
       e.preventDefault();
       e.stopPropagation();
       this.captureKey(e.code);
+      return;
+    }
+    if (!this.modal && this.screenKey?.(e.code)) {
+      e.preventDefault();
+      e.stopPropagation();
       return;
     }
     if (e.code === 'Escape') {
@@ -188,11 +223,11 @@ export class Menu {
         <div class="vm-shade-left"></div>
         <div class="vm-profile">
           <div class="vm-avatars">
-            ${PLAYERS.map((p, i) => `<div class="vm-avatar" style="--c:${p.color}">${i + 1}</div>`).join('')}
+            <div class="vm-avatar" style="--c:${PLAYERS[0].color}">${esc(this.settings.profile.name[0]?.toUpperCase() ?? '?')}</div>
           </div>
           <div>
-            <div class="name">${PLAYERS.map((p) => esc(p.humanName ?? p.name)).join(' · ')}</div>
-            <div class="sub">VS CPU · VS LOCAL</div>
+            <div class="name">${esc(this.settings.profile.name)}</div>
+            <button class="vm-profile-edit" data-go="name">✎ CAMBIAR NOMBRE</button>
           </div>
         </div>
         <div style="position:absolute;left:120px;top:0;bottom:0;display:flex;flex-direction:column;justify-content:center;gap:64px">
@@ -203,7 +238,7 @@ export class Menu {
           </div>
           <div style="display:flex;flex-direction:column;gap:22px;width:560px">
             <button class="vm-btn yellow hero" data-go="create"><span>CREAR PARTIDA</span><span>›</span></button>
-            <button class="vm-btn" data-go="join"><span>UNIRSE AL LOBBY</span><span>›</span></button>
+            <button class="vm-btn" data-go="online"><span>JUGAR ONLINE</span><span>›</span></button>
             <button class="vm-btn" data-go="keys"><span>TECLADO</span><span>›</span></button>
             <button class="vm-btn" data-go="config"><span>CONFIGURACIÓN</span><span>›</span></button>
             <button class="vm-btn red stroked" data-go="exit"><span>SALIR</span><span>✕</span></button>
@@ -216,7 +251,14 @@ export class Menu {
       </div>`, {
       back: () => this.showExit(),
       onMount: (el) => {
-        const go = { create: () => this.showCreate(), join: () => this.showJoin(), keys: () => this.showKeyboard(), config: () => this.showConfig(), exit: () => this.showExit() };
+        const go = {
+          create: () => this.showCreate(),
+          online: () => this.showOnline(),
+          name: () => this.showName(),
+          keys: () => this.showKeyboard(),
+          config: () => this.showConfig(),
+          exit: () => this.showExit(),
+        };
         el.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => go[b.dataset.go]()));
       },
     });
@@ -263,7 +305,7 @@ export class Menu {
                   </button>`).join('')}
               </div>
             </div>
-            <div style="display:grid;grid-template-columns:1.15fr 1.35fr 1fr;gap:28px">
+            <div style="display:grid;grid-template-columns:1fr 1.3fr;gap:28px">
               <div style="display:flex;flex-direction:column;gap:14px">
                 <div class="vm-label">RIVAL</div>
                 <div class="vm-seg" data-opponent>
@@ -277,23 +319,29 @@ export class Menu {
                   ${Object.entries(DIFFICULTIES).map(([id, d]) => `<button class="${r.difficulty === id ? 'on' : ''}" data-v="${id}">${d.label}</button>`).join('')}
                 </div>
               </div>
-              <div style="display:flex;flex-direction:column;gap:14px">
-                <div class="vm-label">POWER-UPS</div>
-                <div class="vm-seg" data-powerups>
-                  <button class="${r.powerups ? 'on' : ''}" data-v="1">Sí</button>
-                  <button class="${r.powerups ? '' : 'on'}" data-v="0">No</button>
-                </div>
-              </div>
             </div>
           </div>
           <div class="vm-panel" style="padding:30px;display:flex;flex-direction:column;gap:20px">
-            <div style="height:300px;border:5px solid var(--vm-ink);border-radius:20px;${mapThumb};background-size:cover;background-position:center"></div>
+            <div style="display:flex;flex-direction:column;gap:20px">
+              <div style="display:flex;flex-direction:column;gap:14px">
+                <div class="vm-label">VUELTAS</div>
+                <div class="vm-seg" style="grid-template-columns:repeat(${LAP_OPTIONS.length},1fr)" data-laps>
+                  ${LAP_OPTIONS.map((n) => `<button class="${r.laps === n ? 'on' : ''}" data-v="${n}">${n}</button>`).join('')}
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:14px">
+                <div class="vm-label">POWER-UPS</div>
+                <div class="vm-seg" style="grid-template-columns:repeat(4,1fr)" data-powerups>
+                  ${Object.entries(POWERUP_AMOUNTS).map(([id, label]) => `<button class="${r.powerups === id ? 'on' : ''}" data-v="${id}">${label}</button>`).join('')}
+                </div>
+              </div>
+            </div>
             <div>
               <div class="vm-display" style="--stroke:0px;--drop:0px;font-size:48px" data-summary-name>${esc(r.name)}</div>
               <div class="vm-muted" style="font-weight:800;font-size:22px">Resumen de la partida</div>
             </div>
             <div style="display:flex;flex-direction:column;font-weight:800;font-size:24px">
-              ${[['Modo', 'Carrera', ''], ['Mapa', 'El Escritorio', ''], ['Rival', rivalText(r), 'data-summary-rival'], ['Power-ups', r.powerups ? 'Activados' : 'Sin objetos', 'data-summary-pu']].map(([k, v, attr]) => `
+              ${[['Modo', 'Carrera', ''], ['Mapa', 'El Escritorio', ''], ['Rival', rivalText(r), 'data-summary-rival'], ['Vueltas', r.laps, 'data-summary-laps'], ['Power-ups', powerupsText(r), 'data-summary-pu']].map(([k, v, attr]) => `
                 <div style="display:flex;justify-content:space-between;padding:14px 0;border-bottom:2px solid var(--vm-line)">
                   <span class="vm-muted">${k}</span><span ${attr}>${v}</span>
                 </div>`).join('')}
@@ -310,9 +358,14 @@ export class Menu {
           el.querySelector('[data-summary-name]').textContent = r.name;
         });
         el.querySelectorAll('[data-powerups] button').forEach((b) => b.addEventListener('click', () => {
-          r.powerups = b.dataset.v === '1';
+          r.powerups = b.dataset.v;
           el.querySelectorAll('[data-powerups] button').forEach((x) => x.classList.toggle('on', x === b));
-          el.querySelector('[data-summary-pu]').textContent = r.powerups ? 'Activados' : 'Sin objetos';
+          el.querySelector('[data-summary-pu]').textContent = powerupsText(r);
+        }));
+        el.querySelectorAll('[data-laps] button').forEach((b) => b.addEventListener('click', () => {
+          r.laps = +b.dataset.v;
+          el.querySelectorAll('[data-laps] button').forEach((x) => x.classList.toggle('on', x === b));
+          el.querySelector('[data-summary-laps]').textContent = r.laps;
         }));
         const seg = (sel, apply) => el.querySelectorAll(`${sel} button`).forEach((b) => b.addEventListener('click', () => {
           apply(b.dataset.v);
@@ -326,121 +379,135 @@ export class Menu {
           box.style.pointerEvents = v === 'cpu' ? '' : 'none';
         });
         seg('[data-difficulty]', (v) => (r.difficulty = v));
-        el.querySelector('[data-start]').addEventListener('click', () => this.cb.onStartRace({ ...r }));
+        el.querySelector('[data-start]').addEventListener('click', () => this.showPilots());
       },
     });
   }
 
-  // ------------------------------------------------------------------ UNIRSE (vista previa)
+  // ------------------------------------------------------------------ ELEGÍ TU PILOTO
 
-  showJoin() {
-    const ping = (ms) => (ms < 60 ? 'vm-ping-good' : ms < 100 ? 'vm-ping-mid' : 'vm-ping-bad');
+  /**
+   * Cada jugador elige piloto con sus teclas de girar y confirma con la de usar objeto.
+   * Contra la CPU, la computadora elige un piloto al azar (distinto) cuando el jugador 1 confirma.
+   * Con los dos listos, el jugador 1 arranca la carrera.
+   */
+  showPilots() {
+    const r = this.race;
+    const cpu = r.opponent === 'cpu';
+    const n = DRIVERS.length;
+    const index = (id) => Math.max(0, DRIVERS.findIndex((d) => d.id === id));
+    const st = { p: [index(this.settings.drivers[0]), index(this.settings.drivers[1])], ready: [false, false], go: false };
+    if (cpu) st.p[1] = -1; // todavía no eligió
+    const controls = this.settings.controls;
+    const keys = (i) => `<kbd>${keyLabel(controls[i].left)}</kbd><kbd>${keyLabel(controls[i].right)}</kbd> elegir <kbd>${keyLabel(controls[i].use)}</kbd> confirmar`;
+
     this.render(`
-      <div class="vm-screen">
-        ${this.header('UNIRSE AL LOBBY')}
-        <div style="flex:1;display:grid;grid-template-columns:minmax(0,1fr) 560px;gap:40px;min-height:0;align-items:start">
-          <div class="vm-panel" style="display:flex;flex-direction:column;gap:14px">
-            <div style="display:flex;justify-content:space-between;align-items:center">
-              <div class="vm-panel-title" style="margin:0">Partidas públicas <span class="vm-soon">VISTA PREVIA</span></div>
-              <button class="vm-btn dark small" data-refresh>↻ ACTUALIZAR</button>
-            </div>
-            <div class="vm-table-head vm-label" style="font-size:17px">
-              <span>PARTIDA</span><span>MODO</span><span>MAPA</span><span>JUGADORES</span><span>PING</span><span></span>
-            </div>
-            ${SAMPLE_LOBBIES.map((l, i) => {
-              const full = l.players[0] >= l.players[1];
-              return `
-                <div class="vm-lobby-row">
-                  <div>${esc(l.name)}<span class="host">Anfitrión: ${esc(l.host)}</span></div>
-                  <div>${l.mode}</div><div>${l.map}</div>
-                  <div style="${full ? 'color:var(--vm-orange)' : ''}">${l.players[0]} / ${l.players[1]}</div>
-                  <div class="${ping(l.ping)}">${l.ping} ms</div>
-                  <button class="vm-btn ${full ? 'dark' : 'yellow'} small center" ${full ? 'disabled' : ''} data-join="${i}">${full ? 'LLENA' : 'UNIRSE'}</button>
-                </div>`;
-            }).join('')}
+      <div class="vm-screen vm-pk">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:24px">
+          ${this.header('ELEGÍ TU PILOTO')}
+          <div class="vm-pk-players">
+            <div class="vm-pk-dots"><span class="vm-pk-dot p1">1</span><span class="vm-pk-dot p2">${cpu ? '🤖' : '2'}</span></div>
+            <div><b>${esc(PLAYERS[0].name)} · ${cpu ? 'CPU' : esc(PLAYERS[1].humanName ?? PLAYERS[1].name)}</b><small>${cpu ? `VS CPU · ${DIFFICULTIES[r.difficulty].label.toUpperCase()}` : 'VS LOCAL'}</small></div>
           </div>
-          <div class="vm-panel" style="display:flex;flex-direction:column;gap:22px">
-            <div class="vm-panel-title" style="margin:0">Unirse con código</div>
-            <div class="vm-muted" style="font-weight:700;font-size:22px">Pedile al anfitrión el código de 6 caracteres de su lobby.</div>
-            <input class="vm-input" maxlength="6" placeholder="ABC123" data-code style="height:110px;text-align:center;font-family:'Lilita One';font-size:64px;letter-spacing:18px;text-transform:uppercase">
-            <button class="vm-btn yellow hero center" data-code-join>UNIRSE</button>
-            <div class="vm-muted" style="font-weight:800;font-size:19px;line-height:1.4">
-              El multijugador online todavía no está disponible: estas partidas son de ejemplo para previsualizar la pantalla.
-            </div>
+        </div>
+        <section class="vm-pk-grid" role="listbox" aria-label="Pilotos">
+          ${pilotCardsHTML(cpu ? 'CPU' : 'J2')}
+        </section>
+        <div class="vm-pk-foot">
+          <div class="vm-pk-keys">
+            <span><i class="vm-pk-pill" style="background:var(--pk-p1)"></i>J1 ${keys(0)}</span>
+            ${cpu ? '' : `<span><i class="vm-pk-pill" style="background:var(--pk-p2)"></i>J2 ${keys(1)}</span>`}
+          </div>
+          <div style="display:flex;align-items:center;gap:22px">
+            <span class="vm-pk-status" data-status aria-live="polite"></span>
+            <button class="vm-btn yellow vm-pk-cta" data-cta><span data-cta-text></span><span>›</span></button>
           </div>
         </div>
       </div>`, {
-      back: () => this.showHome(),
+      back: () => {
+        // Primero se deshace la confirmación; sin nada confirmado, vuelve a Crear partida
+        if (st.go) return;
+        if (st.ready[0]) {
+          st.ready[0] = false;
+          if (cpu) {
+            st.ready[1] = false;
+            st.p[1] = -1;
+          }
+        } else if (st.ready[1]) st.ready[1] = false;
+        else return this.showCreate();
+        update();
+      },
       onMount: (el) => {
-        el.querySelector('[data-refresh]').addEventListener('click', () => this.toast('Online próximamente: la lista es de ejemplo'));
-        el.querySelectorAll('[data-join]').forEach((b) => b.addEventListener('click', () => this.showLobbyPreview(SAMPLE_LOBBIES[b.dataset.join])));
-        el.querySelector('[data-code-join]').addEventListener('click', () => this.showLobbyPreview({ ...SAMPLE_LOBBIES[1], name: 'Lobby privado', code: (el.querySelector('[data-code]').value || 'ABC123').toUpperCase() }));
+        el.querySelectorAll('.vm-pk-card').forEach((c) => c.addEventListener('click', () => {
+          if (st.ready[0] || st.go) return;
+          st.p[0] = +c.dataset.i;
+          update();
+        }));
+        el.querySelector('[data-cta]').addEventListener('click', () => confirm1());
       },
     });
-  }
 
-  // ------------------------------------------------------------------ LOBBY (vista previa)
-
-  showLobbyPreview(lobby) {
-    const pilots = [
-      { n: 'Piloto_01', car: 'Rompecalles', c: PLAYERS[0].color, me: true, ready: false },
-      { n: 'TuercaLoca', car: 'Chispa', c: '#4fc3e8', ready: true },
-      { n: 'Chispa_99', car: 'Tuerca', c: '#5cc24a', ready: true },
-      { n: 'RuedaFeroz', car: 'Farola', c: '#ffc93c', ready: false },
-    ];
-    const slots = lobby.players[1];
-    this.render(`
-      <div class="vm-screen">
-        <div class="vm-header">
-          <button class="vm-btn dark vm-back" data-back>‹ SALIR DEL LOBBY</button>
-          <div>
-            <div class="vm-display" style="font-size:66px">${esc(lobby.name)}</div>
-            <div class="vm-muted" style="font-weight:800;font-size:22px">${lobby.mode} · ${lobby.map}</div>
-          </div>
-          <div class="vm-stripe"></div>
-          <div class="vm-btn small" style="height:76px;gap:20px;cursor:default">
-            <span class="vm-label" style="color:var(--vm-ink);font-size:17px">CÓDIGO</span>
-            <span style="font-size:38px;letter-spacing:8px">${esc(lobby.code || 'WFGXUF')}</span>
-          </div>
-        </div>
-        <div style="flex:1;display:grid;grid-template-columns:minmax(0,1fr) 560px;gap:40px;min-height:0">
-          <div style="display:flex;flex-direction:column;gap:30px;min-height:0">
-            <div class="vm-panel" style="padding:30px">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
-                <div class="vm-panel-title" style="margin:0">Pilotos <span class="vm-soon">VISTA PREVIA</span></div>
-                <div class="vm-display" style="--stroke:0px;--drop:0px;font-size:30px;color:var(--vm-yellow)">${pilots.length} / ${slots}</div>
-              </div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-                ${pilots.map((p) => `
-                  <div class="vm-slot ${p.me ? 'me' : ''}">
-                    <div class="vm-avatar" style="--c:${p.c}">${p.n[0]}</div>
-                    <div class="who">${p.n} ${p.me ? '<span class="tag">TÚ · ANFITRIÓN</span>' : ''}<small>${p.car}</small></div>
-                    <span class="vm-state ${p.ready ? 'ready' : ''}">${p.ready ? 'LISTO' : 'ESPERANDO'}</span>
-                  </div>`).join('')}
-                ${Array.from({ length: Math.max(0, Math.min(2, slots - pilots.length)) }, () => '<div class="vm-slot empty">Esperando piloto…</div>').join('')}
-              </div>
-            </div>
-            <div class="vm-panel" style="flex:1;padding:30px;display:flex;flex-direction:column;justify-content:flex-end;gap:16px">
-              <div style="font-weight:800;font-size:24px"><span style="color:var(--vm-yellow)">Sistema:</span> Entraste en «${esc(lobby.name)}».</div>
-              <div style="font-weight:800;font-size:24px"><span style="color:var(--vm-yellow)">Sistema:</span> El multijugador online llega en una próxima versión.</div>
-              <input class="vm-input" placeholder="Escribí un mensaje y pulsá Enter" disabled>
-            </div>
-          </div>
-          <div class="vm-panel" style="padding:30px;display:flex;flex-direction:column;gap:22px">
-            <div class="vm-panel-title" style="margin:0">Tu máquina</div>
-            <div style="height:260px;border:4px solid var(--vm-ink);border-radius:18px;border-bottom:8px solid var(--vm-orange);${this.thumbs.car ? `background:url(${this.thumbs.car}) center/cover` : 'background:repeating-linear-gradient(-45deg,#23262e 0 20px,#1d2027 20px 40px)'}"></div>
-            <div style="display:flex;justify-content:space-between;align-items:baseline">
-              <div class="vm-display" style="--stroke:0px;--drop:0px;font-size:52px;color:var(--vm-orange)">Rompecalles</div>
-              <div class="vm-label">JUGUETE</div>
-            </div>
-            ${[['Velocidad', 55], ['Blindaje', 40], ['Manejo', 75]].map(([k, v]) => `
-              <div style="display:grid;grid-template-columns:140px 1fr;align-items:center;gap:20px;font-weight:800;font-size:22px">
-                <span class="vm-muted">${k}</span><div class="vm-bar"><div style="width:${v}%"></div></div>
-              </div>`).join('')}
-            <button class="vm-btn hero center" style="margin-top:auto" disabled>ESTOY LISTO</button>
-          </div>
-        </div>
-      </div>`, { back: () => this.showJoin() });
+    const el = this.layer;
+    const cards = [...el.querySelectorAll('.vm-pk-card')];
+    const name = (i) => DRIVERS[st.p[i]].name;
+    function update() {
+      cards.forEach((c, i) => {
+        c.classList.toggle('sel', i === st.p[0]);
+        c.classList.toggle('sel-p2', i === st.p[1]);
+        c.classList.toggle('ready-on', (st.ready[0] && i === st.p[0]) || (st.ready[1] && i === st.p[1]));
+        c.setAttribute('aria-selected', i === st.p[0]);
+      });
+      const text = el.querySelector('[data-cta-text]');
+      const status = el.querySelector('[data-status]');
+      const both = st.ready[0] && st.ready[1];
+      if (st.go) text.textContent = 'Cargando pista…';
+      else if (both) text.textContent = 'Arrancar carrera';
+      else if (st.ready[0]) text.textContent = 'Esperando a J2';
+      else text.textContent = 'Confirmar J1';
+      if (both || st.go) status.textContent = `${name(0)} vs ${name(1)}`;
+      else if (st.ready[0]) status.textContent = `J2 confirma con ${keyLabel(controls[1].use)}`;
+      else if (cpu) status.textContent = 'La CPU elige cuando confirmes';
+      else status.textContent = st.ready[1] ? 'J2 está listo' : 'Faltan confirmar los 2 jugadores';
+      el.querySelector('[data-cta]').disabled = st.go || (st.ready[0] && !st.ready[1]);
+    }
+    const confirm1 = () => {
+      if (st.go) return;
+      if (!st.ready[0]) {
+        st.ready[0] = true;
+        if (cpu) {
+          const others = DRIVERS.map((_, i) => i).filter((i) => i !== st.p[0]);
+          st.p[1] = others[Math.floor(Math.random() * others.length)];
+          st.ready[1] = true;
+        }
+      } else if (st.ready[1]) {
+        st.go = true;
+        const drivers = st.p.map((i) => DRIVERS[i].id);
+        this.settings.drivers = cpu ? [drivers[0], this.settings.drivers[1]] : drivers;
+        saveSettings(this.settings);
+        update();
+        this.cb.onStartRace({ ...r, drivers });
+        return;
+      }
+      update();
+    };
+    this.screenKey = (code) => {
+      if (st.go) return false;
+      const move = (i, dir) => {
+        if (st.ready[i] || (i === 1 && cpu)) return;
+        st.p[i] = (st.p[i] + dir + n) % n;
+      };
+      if (code === controls[0].left) move(0, -1);
+      else if (code === controls[0].right) move(0, 1);
+      else if (code === controls[0].use) return confirm1(), true;
+      else if (!cpu && code === controls[1].left) move(1, -1);
+      else if (!cpu && code === controls[1].right) move(1, 1);
+      else if (!cpu && code === controls[1].use) st.ready[1] = !st.ready[1];
+      else if (code === 'Backspace') return this.back(), true;
+      else return false;
+      update();
+      return true;
+    };
+    update();
   }
 
   // ------------------------------------------------------------------ TECLADO
@@ -710,3 +777,6 @@ export class Menu {
     this.stage.querySelector('.vm-bg').style.display = '';
   }
 }
+
+// Pantallas del online (nombre, lista de lobbies, lobby, pilotos online), ver OnlineScreens.js
+Object.assign(Menu.prototype, OnlineScreens);

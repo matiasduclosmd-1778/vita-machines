@@ -183,9 +183,10 @@ export class Track {
     return false;
   }
 
-  /** Posición de largada para el jugador `slot` (0, 1), detrás de la línea. */
+  /** Posición de largada para el jugador `slot` (0–5): filas de a dos detrás de la línea. */
   startPosition(slot) {
-    return this.path.pointAt(this.startS - 5, slot === 0 ? 2.6 : -2.6);
+    const row = Math.floor(slot / 2);
+    return this.path.pointAt(this.startS - 5 - row * 5.5, slot % 2 === 0 ? 2.6 : -2.6);
   }
 
   /** Dónde reaparece un auto que se cayó: un poco antes de su último punto seguro. */

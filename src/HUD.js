@@ -5,13 +5,14 @@ import { controlsSummary, keyLabel } from './ui/Settings.js';
 export class HUD {
   constructor(root, players, onRestart, onMenu) {
     this.root = root;
+    this.onlineActions = {}; // { back(), leave() } en el online (los pone main.js)
     root.innerHTML = `
-      <div class="top">
+      <div class="top ${players.length > 2 ? 'compact' : ''}">
         ${players.map((p, i) => `
           <div class="card" data-i="${i}" style="--c:${p.color}">
             <div class="card-name">${p.name}</div>
             <div class="card-keys">${p.controlsLabel}</div>
-            <div class="card-info"><span class="place"></span> · Vuelta <span class="lap">1</span></div>
+            <div class="card-info"><span class="place"></span> · Vuelta <span class="lap">1</span>/<span class="laps">5</span></div>
             <div class="item" data-state="EMPTY">
               <span class="item-icon"></span><span class="item-name">EMPTY</span><kbd class="item-key">${p.useLabel}</kbd>
             </div>
@@ -37,9 +38,17 @@ export class HUD {
           <div class="result-body">
             <div class="result-title"></div>
             <div class="result-sub"></div>
-            <div class="result-actions">
+            <div class="result-actions" data-mode="local">
               <button class="vm-btn yellow center restart">REVANCHA</button>
               <button class="vm-btn center menu-btn">MENÚ</button>
+            </div>
+            <div class="result-actions hidden" data-mode="host">
+              <button class="vm-btn yellow center net-back">VOLVER AL LOBBY</button>
+              <button class="vm-btn center net-leave">CERRAR LOBBY</button>
+            </div>
+            <div class="result-actions hidden" data-mode="guest">
+              <div class="result-wait">Esperando al anfitrión…</div>
+              <button class="vm-btn center net-leave">SALIR</button>
             </div>
             <div class="result-hint">o presioná <kbd>R</kbd> / <kbd>Enter</kbd></div>
           </div>
@@ -58,6 +67,8 @@ export class HUD {
       }),
     );
     root.querySelector('.menu-btn').addEventListener('click', () => onMenu?.());
+    root.querySelector('.net-back').addEventListener('click', () => this.onlineActions.back?.());
+    root.querySelectorAll('.net-leave').forEach((b) => b.addEventListener('click', () => this.onlineActions.leave?.()));
     // "Pausa" simula la tecla ESC para reusar el mismo camino que el teclado
     root.querySelector('.pause-btn').addEventListener('click', (e) => {
       e.currentTarget.blur();
@@ -94,7 +105,7 @@ export class HUD {
     players.forEach((p, i) => {
       const card = this.cards[i];
       card.querySelector('.lap').textContent = p.lap;
-      card.querySelector('.place').textContent = p.place === 1 ? '1º' : '2º';
+      card.querySelector('.place').textContent = `${p.place}º`;
       card.dataset.state = p.state;
 
       // Objeto guardado (un solo slot)
@@ -159,19 +170,34 @@ export class HUD {
     slot.classList.add('got');
   }
 
-  showResult(winner, loser) {
+  /** Total de vueltas de la carrera (se muestra como "Vuelta 2/5"). */
+  setLaps(laps) {
+    this.root.querySelectorAll('.laps').forEach((el) => (el.textContent = laps));
+  }
+
+  /** result: { title, color, sub } (ver Game.finish). */
+  showResult(result) {
     const title = this.result.querySelector('.result-title');
-    const sub = this.result.querySelector('.result-sub');
-    if (winner) {
-      title.textContent = `¡${winner.name} gana!`;
-      title.style.color = winner.color;
-      sub.textContent = `${loser.name} quedó fuera de pantalla y fue eliminado.`;
-    } else {
-      title.textContent = '¡Empate!';
-      title.style.color = '';
-      sub.textContent = 'Ambos jugadores fueron eliminados a la vez.';
-    }
+    title.textContent = result.title;
+    title.style.color = result.color;
+    this.result.querySelector('.result-sub').textContent = result.sub;
     this.result.classList.remove('hidden');
+  }
+
+  /** Botones del cartel de resultado: 'local' (revancha / menú), 'host' (volver al lobby) o 'guest' (esperar). */
+  setResultMode(mode) {
+    this.result.querySelectorAll('.result-actions').forEach((el) => el.classList.toggle('hidden', el.dataset.mode !== mode));
+    this.result.querySelector('.result-hint').classList.toggle('hidden', mode !== 'local');
+    // Online no se reinicia la carrera (la maneja el anfitrión)
+    this.root.querySelector('.top-actions .restart').classList.toggle('hidden', mode !== 'local');
+  }
+
+  /** Online: resalta la tarjeta del jugador propio y oculta las teclas de los demás. */
+  markLocal(index) {
+    this.cards.forEach((card, i) => {
+      card.classList.toggle('me', i === index);
+      if (i !== index) card.querySelector('.card-keys').textContent = '';
+    });
   }
 
   hideResult() {

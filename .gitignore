@@ -3,7 +3,11 @@ dist
 .vercel
 .env*
 .DS_Store
-# Modelo original descargado (19 MB); el juego usa la versión optimizada en src/assets/models/
+# Modelos originales descargados (19–49 MB); el juego usa las versiones optimizadas en src/assets/models/
 2023_toyota_corolla_hybrid.glb
+clio_2.glb
+peugeot_partner_tepee.glb
+# Diseño original de la pantalla de pilotos (las imágenes ya están en src/assets/pilots/)
+vita-machines-seleccion.zip
 # Capturas sueltas de pruebas
 s2-*.png

@@ -187,6 +187,8 @@ export class AIDriver {
     switch (id) {
       case 'BOMB':
         return ahead > 0.96 && dist < 40 && sameLevel;
+      case 'MISSILE':
+        return rival.progress > car.progress && dist < 60;
       case 'OIL':
         return ahead < -0.7 && dist < 30;
       case 'MAGNET':

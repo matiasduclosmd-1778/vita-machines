@@ -1,14 +1,14 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { POWERUP_CONFIG } from '../config.js';
 import { glass } from '../world/materials.js';
 
-const BOX = POWERUP_CONFIG.itemBoxes;
 let sharedMaterials = null;
 
 /** Caja flotante que entrega un power-up al tocarla y reaparece después de un tiempo. */
 export class ItemBox {
-  constructor(scene, x, y, z, phase) {
+  constructor(scene, x, y, z, phase, respawnTime) {
+    this.scene = scene;
+    this.respawnTime = respawnTime;
     this.x = x;
     this.y = y;
     this.z = z;
@@ -38,13 +38,26 @@ export class ItemBox {
   }
 
   collect() {
-    this.respawnTimer = BOX.respawnTime;
+    this.respawnTimer = this.respawnTime;
     this.group.visible = false;
   }
 
   reset() {
     this.respawnTimer = 0;
     this.group.visible = true;
+  }
+
+  /** Invitado online: el anfitrión dice si la caja está; al volver, crece como al reaparecer. */
+  setActive(on) {
+    if (on && !this.group.visible) this.spawnAnim = 0;
+    this.group.visible = on;
+  }
+
+  dispose() {
+    this.scene.remove(this.group);
+    for (const m of [this.cube, this.frame, this.shadow]) m.geometry.dispose();
+    this.frame.material.dispose();
+    this.shadow.material.dispose(); // los materiales del cubo son compartidos entre cajas
   }
 
   update(dt, time) {

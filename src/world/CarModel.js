@@ -8,22 +8,24 @@ const PAINT_NAME = /paint|body|carpaint|car_paint|exterior|coat|lack|pintura|cha
 const NOT_PAINT = /glass|window|vidrio|light|lamp|chrome|tire|tyre|rubber|wheel|rim|interior|seat|plate|logo|badge|black|mirror/i;
 
 /**
- * Carga el modelo 3D del auto una sola vez y lo deja listo para clonar:
+ * Carga el modelo 3D de un auto una sola vez y lo deja listo para clonar:
  *  - escalado al largo del auto del juego y apoyado en el piso (y = 0);
  *  - orientado con el frente hacia +Z (la convención de Car.js);
  *  - con el material de la carrocería identificado para poder pintarlo.
+ * `spec` es su entrada en GAME_CONFIG.cars ({ id, paint, yawOffset, materials }).
  * Devuelve null si no se pudo cargar (el juego sigue con el auto hecho con primitivas).
  */
-export async function loadCarModel(url) {
+export async function loadCarModel(url, spec = {}) {
   let gltf;
   try {
     gltf = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(url);
   } catch (e) {
-    console.warn('[auto] no se pudo cargar el modelo, se usa el auto de primitivas:', e);
+    console.warn(`[auto] no se pudo cargar ${spec.id ?? url}, se usa el auto de primitivas:`, e);
     return null;
   }
   const root = gltf.scene;
   root.updateMatrixWorld(true);
+  bakeSkinnedMeshes(root);
 
   // Orientación: el eje horizontal más largo es el largo del auto → lo llevamos a Z
   let box = new THREE.Box3().setFromObject(root);
@@ -31,7 +33,7 @@ export async function loadCarModel(url) {
   const pivot = new THREE.Group();
   pivot.add(root);
   if (size.x > size.z) root.rotation.y = Math.PI / 2;
-  root.rotation.y += M.yawOffset; // corrección manual si el frente queda al revés
+  root.rotation.y += spec.yawOffset ?? 0; // corrección manual si el frente queda al revés
   pivot.updateMatrixWorld(true);
 
   // Escala y apoyo en el piso, centrado
@@ -82,8 +84,10 @@ export async function loadCarModel(url) {
     }
   });
 
+  // Carrocería: la indicada en la configuración; si no, se adivina por nombre y superficie
   const named = [...stats.keys()].filter((m) => PAINT_NAME.test(m.name || '') && !NOT_PAINT.test(m.name || ''));
-  let paint = named.sort((x, y) => stats.get(y).area - stats.get(x).area)[0];
+  let paint = [...stats.keys()].find((m) => m.name === spec.paint);
+  paint ??= named.sort((x, y) => stats.get(y).area - stats.get(x).area)[0];
   if (!paint) {
     // Sin nombres útiles: el material claro, opaco y no metálico-espejo con más superficie
     paint = [...stats.keys()]
@@ -91,13 +95,13 @@ export async function loadCarModel(url) {
       .sort((x, y) => stats.get(y).area - stats.get(x).area)[0];
   }
 
-  for (const m of stats.keys()) tuneMaterial(m);
+  for (const m of stats.keys()) tuneMaterial(m, spec.materials ?? []);
 
   if (import.meta.env.DEV) {
-    console.info(`[auto] modelo cargado: ${Math.round(triangles)} triángulos, ${stats.size} materiales, escala ${scale.toFixed(4)}`);
+    console.info(`[auto] ${spec.id ?? 'modelo'} cargado: ${Math.round(triangles)} triángulos, ${stats.size} materiales, escala ${scale.toFixed(4)}`);
     console.table([...stats].map(([m, s]) => ({ material: m.name, color: m.color?.getHexString(), area: s.area.toFixed(2), meshes: s.meshes, transparente: m.transparent, pintura: m === paint })));
   }
-  return { scene: pivot, paint, triangles };
+  return { id: spec.id, scene: pivot, paint, triangles };
 }
 
 /** Pintura de auto metalizada con barniz (azul medianoche, rojo, etc.). */
@@ -124,23 +128,56 @@ export function instantiateCar(model, color) {
 }
 
 /**
- * El modelo trae todos los materiales sin metal ni brillo (se ven de plástico).
- * Se ajustan por nombre (los nombres del archivo están en portugués).
+ * Algunos modelos vienen riggeados (cada pieza ubicada por un hueso). Un SkinnedMesh clonado pierde
+ * sus huesos y no se dibuja, y además el auto no necesita animarse: se hornea la pose actual
+ * en una malla común (posiciones y normales ya transformadas por los huesos).
  */
-const MATERIAL_TUNING = [
-  [/Espelho/i, { color: '#dfe3ea', metalness: 1, roughness: 0.05 }], // espejos
-  [/Cromado|Roda/i, { metalness: 1, roughness: 0.2 }], // cromados y llantas
-  [/Vidros_Vermelhos|Refletor_Lanterna/i, { emissive: '#ff1a1a', emissiveIntensity: 1.2 }], // luces traseras
-  [/Vidros/i, { color: '#0b0f16', metalness: 0.6, roughness: 0.04, opacity: 0.65 }], // vidrios
-  [/Farol/i, { metalness: 0.9, roughness: 0.15 }], // reflectores de los faros
-  [/Laranja/i, { emissive: '#ff7a00', emissiveIntensity: 0.4 }], // giros
-  [/Freio/i, { metalness: 0.7, roughness: 0.35 }], // frenos
-  [/Pneu/i, { roughness: 0.92 }], // neumáticos
-  [/Plastico|Preto|Interno/i, { roughness: 0.65 }], // plásticos y tapizado
-];
+function bakeSkinnedMeshes(root) {
+  const skinned = [];
+  root.traverse((o) => o.isSkinnedMesh && skinned.push(o));
+  const p = new THREE.Vector3();
+  const n = new THREE.Vector3();
+  const q = new THREE.Vector3();
+  for (const sm of skinned) {
+    const src = sm.geometry;
+    const pos = src.attributes.position;
+    const nor = src.attributes.normal;
+    const outPos = new Float32Array(pos.count * 3);
+    const outNor = nor ? new Float32Array(pos.count * 3) : null;
+    for (let i = 0; i < pos.count; i++) {
+      p.fromBufferAttribute(pos, i);
+      if (nor) q.copy(p).add(n.fromBufferAttribute(nor, i)); // la normal se transforma como diferencia de dos puntos
+      sm.applyBoneTransform(i, p);
+      p.toArray(outPos, i * 3);
+      if (nor) {
+        sm.applyBoneTransform(i, q);
+        q.sub(p).normalize().toArray(outNor, i * 3);
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    for (const [name, attr] of Object.entries(src.attributes)) {
+      if (name !== 'position' && name !== 'normal' && name !== 'skinIndex' && name !== 'skinWeight') geo.setAttribute(name, attr);
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(outPos, 3));
+    if (outNor) geo.setAttribute('normal', new THREE.BufferAttribute(outNor, 3));
+    geo.setIndex(src.index);
+    for (const g of src.groups) geo.addGroup(g.start, g.count, g.materialIndex);
 
-function tuneMaterial(m) {
-  const rule = MATERIAL_TUNING.find(([re]) => re.test(m.name || ''));
+    const mesh = new THREE.Mesh(geo, sm.material);
+    mesh.name = sm.name;
+    mesh.position.copy(sm.position);
+    mesh.quaternion.copy(sm.quaternion);
+    mesh.scale.copy(sm.scale);
+    sm.parent.add(mesh);
+    sm.parent.remove(sm);
+  }
+  // Los huesos quedan como grupos vacíos (no molestan); se actualizan las matrices de lo nuevo
+  root.updateMatrixWorld(true);
+}
+
+/** Ajusta un material según la primera regla de `rules` ([regex del nombre, propiedades]) que coincida. */
+function tuneMaterial(m, rules) {
+  const rule = rules.find(([re]) => re.test(m.name || ''));
   if (!rule) return;
   const props = rule[1];
   for (const [k, v] of Object.entries(props)) {
