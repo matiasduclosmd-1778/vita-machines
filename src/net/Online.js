@@ -53,7 +53,7 @@ export async function browseLobbies(onChange) {
  */
 export class OnlineSession {
   /** Crea un lobby nuevo como anfitrión. */
-  static async host(profile, { name, isPublic, laps, powerups }) {
+  static async host(profile, { name, isPublic, rounds, powerups }) {
     const code = makeCode();
     const s = new OnlineSession(profile, code, true);
     s.channel = await openChannel(room(code));
@@ -62,7 +62,7 @@ export class OnlineSession {
       code,
       name,
       public: isPublic,
-      laps,
+      rounds,
       powerups,
       max: NET.maxPlayers,
       phase: 'lobby',
@@ -297,7 +297,7 @@ export class OnlineSession {
     const s = this.state;
     s.phase = 'race';
     const race = {
-      laps: s.laps,
+      rounds: s.rounds,
       powerups: s.powerups,
       players: [...s.players].sort((a, b) => a.slot - b.slot).map((p) => ({ id: p.id, name: p.name, slot: p.slot, driver: p.driver })),
     };
@@ -316,8 +316,8 @@ export class OnlineSession {
     this.changed();
   }
 
-  setOptions({ laps, powerups, name, isPublic }) {
-    Object.assign(this.state, { laps, powerups, name, public: isPublic });
+  setOptions({ rounds, powerups, name, isPublic }) {
+    Object.assign(this.state, { rounds, powerups, name, public: isPublic });
     this.changed();
   }
 
@@ -359,7 +359,7 @@ export class OnlineSession {
     const host = s.players.find((p) => p.host);
     this.directory.send({
       t: 'ad',
-      lobby: { code: s.code, name: s.name, host: host.name, players: s.players.length, max: s.max, phase: s.phase, laps: s.laps, powerups: s.powerups },
+      lobby: { code: s.code, name: s.name, host: host.name, players: s.players.length, max: s.max, phase: s.phase, rounds: s.rounds, powerups: s.powerups },
     });
   }
 

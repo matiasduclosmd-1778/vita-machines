@@ -63,6 +63,12 @@ export class MagnetEffect extends Effect {
     const d = Math.hypot(dx, dz);
     if (d > CFG.maxDistance || d < CFG.minDistance) return;
     if (!this.ctx.tryAffect(target, { strong: false })) return;
+    // Daño: una vez por imán y por rival, al empezar a atraerlo
+    this.damaged ??= new Set();
+    if (!this.damaged.has(target)) {
+      this.damaged.add(target);
+      this.ctx.damage(target, CFG.damage);
+    }
     // Fuerza moderada sobre la velocidad del rival: no teletransporta ni toca su dirección
     target.velocity.x += (dx / d) * CFG.force * dt;
     target.velocity.z += (dz / d) * CFG.force * dt;

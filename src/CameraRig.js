@@ -66,8 +66,10 @@ export class CameraRig {
    * @param leader  auto que va primero (o null)
    * @param yawGoal hacia dónde debe mirar la cámara (heading, misma convención que los autos)
    * @param snap    saltar sin suavizado (al reiniciar)
+   * @param closeup distancia fija de cámara (festejo del ganador de la ronda) o null
    */
-  update(dt, cars, leader, yawGoal, snap = false) {
+  update(dt, cars, leader, yawGoal, snap = false, closeup = null) {
+    this.closeup = closeup;
     if (snap) this.yaw = yawGoal;
     else this.yaw += wrapAngle(yawGoal - this.yaw) * (1 - Math.exp(-CAM.yawSmoothing * dt));
 
@@ -84,10 +86,10 @@ export class CameraRig {
       this.distance = this.targetDistance;
     } else {
       this.focus.lerp(this.target, 1 - Math.exp(-CAM.smoothing * dt));
-      const k = this.targetDistance > this.distance ? CAM.zoomOutSmoothing : CAM.zoomInSmoothing;
+      const k = this.closeup != null ? 3.5 : this.targetDistance > this.distance ? CAM.zoomOutSmoothing : CAM.zoomInSmoothing;
       this.distance += (this.targetDistance - this.distance) * (1 - Math.exp(-k * dt));
-      // El suavizado nunca debe dejar a alguien fuera antes de llegar al máximo
-      this.distance = Math.max(this.distance, Math.min(this.hardDistance(cars), CAM.maxDistance));
+      // El suavizado nunca debe dejar a alguien fuera antes de llegar al máximo (salvo en el primer plano del festejo)
+      if (this.closeup == null) this.distance = Math.max(this.distance, Math.min(this.hardDistance(cars), CAM.maxDistance));
     }
 
     // Detrás del foco (opuesto a forward) y elevada
@@ -132,7 +134,7 @@ export class CameraRig {
     const needU = (maxU - minU) / (2 * fit.halfX);
     const needV = (maxV - minV) / (fit.near + fit.far);
     this.requiredDistance = Math.max(needU, needV);
-    const D = clamp(this.requiredDistance, CAM.minDistance, CAM.maxDistance);
+    const D = this.closeup ?? clamp(this.requiredDistance, CAM.minDistance, CAM.maxDistance);
     this.targetDistance = D;
 
     // 2. Foco en el punto medio (centrado en la franja visible, compensando near/far)

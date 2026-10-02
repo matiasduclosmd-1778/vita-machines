@@ -14,7 +14,7 @@ export const ACTIONS = [
   { id: 'left', label: 'Girar a la izquierda' },
   { id: 'right', label: 'Girar a la derecha' },
   { id: 'use', label: 'Usar objeto' },
-  { id: 'jump', label: 'Saltar (moto)' },
+  { id: 'jump', label: 'Saltar' },
 ];
 
 export function defaultSettings() {
@@ -29,7 +29,6 @@ export function defaultSettings() {
     audio: { master: 80, music: 70, sfx: 80 }, // volúmenes 0..100 (ver src/audio/)
     game: {
       debug: GAME_CONFIG.debug.enabled,
-      outCountdown: GAME_CONFIG.outOfScreen.countdown,
     },
     controls: DEFAULT_CONTROLS.map((c) => ({ ...c })),
     pads: GAME_CONFIG.players.map((_, i) => i), // joystick de cada jugador (0 = el primero conectado) o null

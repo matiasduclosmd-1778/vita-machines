@@ -16,7 +16,9 @@ import { AIDriver } from './ai/AIDriver.js';
 import { localPlayerName } from './ui/Settings.js';
 import { audio } from './audio/index.js';
 
-const { physicsStep: STEP, players: PLAYERS, camera: CAM, outOfScreen: OUT } = GAME_CONFIG;
+const { physicsStep: STEP, players: PLAYERS, camera: CAM, outOfScreen: OUT, race: RACE } = GAME_CONFIG;
+const HOLD = { throttle: 0, steer: 0 }; // en la cuenta regresiva nadie se mueve
+const BRAKE = { throttle: 0, steer: 0, stop: true }; // en el festejo, el ganador frena
 
 export class Game {
   /**
@@ -41,7 +43,7 @@ export class Game {
     this.terrain = new Terrain(this.track);
     this.rig = new CameraRig(window.innerWidth / window.innerHeight);
     this.input = input;
-    this.laps = GAME_CONFIG.race.laps;
+    this.rounds = RACE.rounds;
     this.net = null; // online: HostSync (anfitrión) o GuestSync (invitado), ver src/net/NetRace.js
     this.cars = [];
     this.powerups = new PowerUpManager(this.scene, this.track, this.cars);
@@ -53,6 +55,11 @@ export class Game {
     };
     this.powerups.onUse = (car, type) => this.sfx(`use-${type.id}`, { car });
     this.powerups.onSound = (name, pos, opts = {}) => this.sfx(name, { pos, ...opts });
+    // Sin vida: el auto explota y queda eliminado
+    this.powerups.onKnockout = (car) => {
+      this.powerups.explosion(car.position, 1.4);
+      this.eliminate([this.cars.indexOf(car)]);
+    };
     this.setupPlayers(this.localPlayers(2));
     this.postfx = new PostFX(this.renderer, this.scene, this.rig.camera);
 
@@ -67,6 +74,12 @@ export class Game {
       }
       const confirm = code === 'Enter' || pad === 'A';
       if (!this.net && (code === 'KeyR' || (confirm && this.state === 'finished'))) return this.restart();
+      // Podio con el mando: B = volver al menú (online: A = volver al lobby si sos el anfitrión, B = salir)
+      if (this.state === 'finished' && pad) {
+        if (!this.net && pad === 'B') return this.callbacks.onMenu?.();
+        if (this.net?.isHost && pad === 'A') return this.callbacks.online?.back?.();
+        if (this.net && pad === 'B') return this.callbacks.online?.leave?.();
+      }
       if (code === 'KeyV') this.debug.toggle();
       if (code === 'KeyG') console.info('[gráficos] calidad:', this.postfx.toggleQuality());
       if (this.state !== 'racing') return;
@@ -108,7 +121,6 @@ export class Game {
     this.debug?.dispose(this.scene);
     this.hud = new HUD(this.hudRoot, players, () => this.restart(), () => this.callbacks.onMenu?.());
     this.hud.onlineActions = this.callbacks.online ?? {};
-    this.hud.setLaps(this.laps);
     this.debug = new Debug(this.hudRoot, this.scene, players);
     if (debugOn != null) {
       this.debug.enabled = debugOn; // se mantiene lo que eligió el jugador (tecla V o configuración)
@@ -138,17 +150,16 @@ export class Game {
     ];
     const clamp1 = (v) => Math.max(-1, Math.min(1, v));
     const sum = (k) => clamp1(a.reduce((t, x) => t + x[k], 0));
-    return { throttle: sum('throttle'), steer: sum('steer') };
+    return { throttle: sum('throttle'), steer: sum('steer'), fire: a.some((x) => x.fire) };
   }
 
   /**
    * Carrera online. net: HostSync o GuestSync (ver src/net/NetRace.js), que ya armó los jugadores.
-   * race: { laps, powerups, players: [{ driver }] }
+   * race: { rounds, powerups, players: [{ driver }] }
    */
   startOnlineRace(net, race) {
     this.net = net;
-    this.laps = race.laps;
-    this.hud.setLaps(race.laps);
+    this.rounds = race.rounds ?? RACE.rounds;
     this.hud.setResultMode(net.isHost ? 'host' : 'guest');
     this.powerups.setAmount(race.powerups);
     this.setDrivers(race.players.map((p) => p.driver));
@@ -170,13 +181,12 @@ export class Game {
    * Arranca una carrera nueva con las opciones elegidas en "Crear partida".
    * humans: personas (jugadores 1…humans) · cpus: pilotos de la computadora (los autos que siguen)
    * drivers: id del piloto de cada auto (GAME_CONFIG.drivers)
-   * laps: vueltas para ganar · powerups: 'off' | 'few' | 'normal' | 'many'
+   * rounds: rondas de la partida · powerups: 'off' | 'few' | 'normal' | 'many'
    */
-  startRace({ powerups = 'normal', humans = 1, cpus = 1, difficulty = 'normal', drivers = [], laps = GAME_CONFIG.race.laps } = {}) {
+  startRace({ powerups = 'normal', humans = 1, cpus = 1, difficulty = 'normal', drivers = [], rounds = RACE.rounds } = {}) {
     if (this.net) this.endOnline();
     this.setupPlayers(this.localPlayers(humans + cpus));
-    this.laps = laps;
-    this.hud.setLaps(laps);
+    this.rounds = rounds;
     this.powerups.setAmount(powerups);
     this.setDrivers(drivers);
     this.setCpus(humans, difficulty);
@@ -240,7 +250,7 @@ export class Game {
   resume() {
     this.running = true;
     audio.setPaused(false);
-    if (this.state === 'racing') audio.music.play('race', this.finalLap ? 1 : 0);
+    if (this.state === 'racing') audio.music.play('race', this.musicIntensity());
     this.lastTime = 0; // evita un salto de tiempo después de la pausa
     this.accumulator = 0;
     this.setHudVisible(true);
@@ -278,7 +288,6 @@ export class Game {
       sun.shadow.map = null;
     }
 
-    GAME_CONFIG.outOfScreen.countdown = settings.game.outCountdown;
     this.debug.enabled = settings.game.debug;
     this.debug.apply();
 
@@ -335,7 +344,18 @@ export class Game {
     return { map, car: carShot };
   }
 
+  /** Partida nueva: marcador en cero y primera ronda. */
   restart() {
+    this.round = 1;
+    this.scores = this.cars.map(() => 0);
+    this.tiebreak = false;
+    this.hud.hideResult();
+    this.result = null;
+    this.startRound();
+  }
+
+  /** Ronda: todos a la grilla con la vida llena, objetos reiniciados y cuenta 3…2…1. */
+  startRound() {
     this.cars.forEach((car, i) => {
       const p = this.track.startPosition(i);
       car.reset(p.x, p.z, p.heading, p.y);
@@ -345,13 +365,16 @@ export class Game {
     this.tracker.reset();
     this.powerups.reset();
     this.drivers?.forEach((d) => d?.reset());
-    this.hud.hideResult();
-    this.result = null;
-    this.state = 'racing';
+    // Cuenta regresiva 3…2…1 antes de largar (ver frame); después, 'racing'
+    this.state = 'countdown';
+    this.countdown = RACE.countdown;
+    this.goTimer = 0;
     this.raceTime = 0;
-    this.lapsSeen = this.cars.map(() => 1);
-    this.finalLap = false;
-    this.startCue = true; // la largada suena en el primer cuadro (ver frame)
+    this.celebrant = -1;
+    this.celebrateTime = 0;
+    this.hud.setRound(this.round, this.rounds, this.tiebreak);
+    this.hud.hideRoundWinner();
+    this.startCue = true; // en el primer cuadro se calla la música anterior (la de carrera entra con el "¡YA!")
     const leader = this.leader();
     this.rig.update(0, this.cars, leader, this.cameraYaw(this.cars, leader), true);
   }
@@ -361,6 +384,22 @@ export class Game {
     this.lastTime = time;
 
     const guest = this.net && !this.net.isHost;
+    // Cuenta regresiva (la lleva el anfitrión; el invitado recibe cuánto falta)
+    if (this.state === 'countdown' && !guest) {
+      this.countdown -= dt;
+      if (this.countdown <= 0) this.go();
+    }
+    // Festejo del ganador de la ronda: saltitos con vuelta y, al terminar, la ronda siguiente
+    if (this.state === 'celebrate' && !guest) {
+      const t0 = this.celebrateTime;
+      this.celebrateTime += dt;
+      const champ = this.cars[this.celebrant];
+      for (const at of [0.45, 1.6]) if (champ && t0 < at && this.celebrateTime >= at) champ.hop((Math.floor(at) % 2 ? -1 : 1));
+      if (this.celebrateTime >= RACE.celebrate) this.nextRound();
+    }
+    if (guest && this.state === 'racing' && this.prevState === 'countdown') this.goTimer = RACE.goShow;
+    this.prevState = this.state;
+    this.goTimer = Math.max(0, this.goTimer - dt);
     if (guest) {
       // Invitado: no simula; muestra el estado que manda el anfitrión
       this.net.apply(dt);
@@ -376,10 +415,11 @@ export class Game {
     this.updateAudio(dt);
     this.powerups.update(dt);
 
-    // La cámara encuadra a los autos vivos que no se están cayendo
-    const framed = this.cars.filter((c) => c.alive && !c.fall);
-    const leader = this.leader();
-    this.rig.update(dt, framed, leader, this.cameraYaw(framed, leader));
+    // La cámara encuadra a los autos vivos que no se están cayendo; en el festejo, de cerca al ganador
+    const champ = this.state === 'celebrate' ? this.cars[this.celebrant] : null;
+    const framed = champ ? [champ] : this.cars.filter((c) => c.alive && !c.fall);
+    const leader = champ ?? this.leader();
+    this.rig.update(dt, framed, leader, this.cameraYaw(framed, leader), false, champ ? RACE.closeup : null);
 
     if (this.state === 'racing' && !guest) {
       this.raceTime += dt;
@@ -398,18 +438,24 @@ export class Game {
     this.postfx.render();
   }
 
-  /** ¿Alguien completó las vueltas? Gana el que más avanzó (por si cruzan en el mismo paso). */
-  checkLaps() {
-    if (this.state !== 'racing') return;
-    const goal = this.laps * this.track.length;
-    const done = this.cars.filter((c) => c.alive && c.progress >= goal);
-    if (!done.length) return;
-    const winner = done.sort((a, b) => b.progress - a.progress)[0];
-    this.finish({ winner, byLaps: true });
+  /** ¡Largada! Termina la cuenta regresiva. */
+  go() {
+    this.countdown = 0;
+    this.state = 'racing';
+    this.goTimer = RACE.goShow;
+    for (const car of this.cars) car.rev = 0;
   }
 
   /** Controles de cada auto: piloto de la CPU, jugador remoto (online) o teclado/joystick. */
   inputFor(i) {
+    if (this.state === 'celebrate' || this.state === 'finished') return BRAKE;
+    if (this.state === 'countdown') {
+      // Quietos; acelerar solo hace rugir el motor
+      const car = this.cars[i];
+      const throttle = this.drivers?.[i] ? 0.35 : (this.net ? this.net.inputFor(i) : this.input.axis(car.player.controls, car.player.pad)).throttle;
+      car.rev = Math.max(0, throttle);
+      return HOLD;
+    }
     const driver = this.drivers?.[i];
     if (driver) return driver.update(STEP);
     if (this.net) return this.net.inputFor(i);
@@ -418,7 +464,12 @@ export class Game {
   }
 
   fixedUpdate(dt) {
-    this.cars.forEach((car, i) => car.step(dt, this.inputFor(i)));
+    this.cars.forEach((car, i) => {
+      const input = this.inputFor(i);
+      car.step(dt, input);
+      // Arma: mantener "usar objeto" dispara en automático
+      this.powerups.trigger(car, this.state === 'racing' && !!input.fire, dt);
+    });
     for (let i = 0; i < this.cars.length; i++) {
       for (let j = i + 1; j < this.cars.length; j++) resolveCarCar(this.cars[i], this.cars[j]);
     }
@@ -428,7 +479,6 @@ export class Game {
     }
     this.terrain.fixedUpdate(dt, this.cars);
     for (const car of this.cars) if (!car.fall) this.track.updateProgress(car);
-    this.checkLaps();
     this.powerups.fixedUpdate(dt);
   }
 
@@ -450,72 +500,79 @@ export class Game {
     return best;
   }
 
-  /** Autos que quedaron fuera de pantalla (o se desconectaron). Si queda uno solo (o ninguno), termina. */
+  /** Autos que quedaron atrás, sin vida o se desconectaron. Si queda uno solo (o ninguno), termina la ronda. */
   eliminate(indices) {
     if (this.state !== 'racing') return;
     indices.forEach((i) => {
       this.cars[i].eliminate();
       this.sfx('eliminated', { car: this.cars[i] });
-      this.cars[i].eliminatedAt = this.raceTime; // para ordenar el podio
+      this.cars[i].eliminatedAt = this.raceTime;
     });
     const alive = this.cars.filter((c) => c.alive);
-    if (alive.length <= 1) this.finish({ winner: alive[0] ?? null, eliminated: indices });
+    if (alive.length <= 1) this.endRound(alive[0] ?? null);
   }
 
-  /**
-   * Fin de la carrera: { winner, eliminated: [índices] } (el último en pie)
-   * o { winner, byLaps: true } (completó las vueltas). Arma el resultado para el podio.
-   */
-  finish({ winner = null, eliminated = [], byLaps = false }) {
-    this.state = 'finished';
-    // Los que siguen en carrera vuelven a NORMAL: ya no corre el chequeo de pantalla
-    this.cars.forEach((c, i) => {
-      if (!c.alive) return;
-      c.state = PlayerState.NORMAL;
-      this.tracker.timers[i] = 0;
-      this.tracker.inside[i] = true;
+  /** Fin de la ronda: el ganador suma y festeja (si quedaron todos afuera a la vez, nadie suma y se repite). */
+  endRound(winner) {
+    this.state = 'celebrate';
+    this.celebrateTime = 0;
+    this.celebrant = winner ? this.cars.indexOf(winner) : -1;
+    if (winner) this.scores[this.celebrant]++;
+    this.cars.forEach((c) => {
+      if (c.alive) c.state = PlayerState.NORMAL;
     });
+  }
+
+  /** Después del festejo: ronda siguiente, ronda extra (empate arriba) o fin de la partida. */
+  nextRound() {
+    if (this.celebrant < 0) return this.startRound(); // ronda sin ganador: se repite
+    const sorted = [...this.scores].sort((a, b) => b - a);
+    const [top, second = 0] = sorted;
+    const left = Math.max(0, this.rounds - this.round);
+    const clear = top > second; // un solo líder
+    if (clear && (top > second + left || this.round >= this.rounds)) {
+      return this.finish({ winner: this.cars[this.scores.indexOf(top)] });
+    }
+    this.round++;
+    this.tiebreak = this.round > this.rounds; // empate arriba al final: ronda extra
+    this.startRound();
+  }
+
+  /** La música de carrera va a fondo en la última ronda, en la ronda extra o si alguien puede ganar la partida. */
+  musicIntensity() {
+    const need = Math.floor(this.rounds / 2) + 1;
+    return this.round >= this.rounds || this.tiebreak || Math.max(...(this.scores ?? [0])) >= need - 1 ? 1 : 0;
+  }
+
+  /** Fin de la partida: podio con las rondas ganadas por cada uno. */
+  finish({ winner = null }) {
+    this.state = 'finished';
     const p = winner?.player;
+    const wins = winner ? this.scores[this.cars.indexOf(winner)] : 0;
+    const played = this.scores.reduce((a, b) => a + b, 0);
     this.result = {
       winner: winner ? this.cars.indexOf(winner) : -1,
       title: winner ? `¡${p.name} gana!` : '¡Empate!',
       color: p?.color ?? '',
-      sub: !winner
-        ? 'Quedaron todos eliminados a la vez.'
-        : byLaps
-          ? `Completó las ${this.laps} vueltas primero.`
-          : 'Fue el último en quedar en pantalla.',
+      sub: winner ? `Ganó ${wins} de ${played} ${played === 1 ? 'ronda' : 'rondas'}.` : 'Nadie ganó la partida.',
       standings: this.standings(winner),
     };
     this.hud.showResult(this.result);
   }
 
-  /**
-   * Clasificación final, del 1º al último: primero los que siguen en carrera (por lo que avanzaron),
-   * después los eliminados (el último en caer, más arriba). Solo datos simples: el online la manda tal cual.
-   *  time: tiempo del ganador (ms) · gap: diferencia estimada en segundos (según la velocidad media del ganador)
-   *  out: eliminado (y en qué vuelta)
-   */
+  /** Clasificación final por rondas ganadas (el ganador, primero). Solo datos simples: el online la manda tal cual. */
   standings(winner) {
-    const alive = this.cars.filter((c) => c.alive).sort((a, b) => b.progress - a.progress);
-    const out = this.cars.filter((c) => !c.alive).sort((a, b) => (b.eliminatedAt ?? 0) - (a.eliminatedAt ?? 0));
-    if (winner && alive[0] !== winner) alive.splice(alive.indexOf(winner), 1), alive.unshift(winner);
-    const lead = alive[0];
-    const pace = lead && this.raceTime > 0 ? lead.progress / this.raceTime : 0; // u/s del que va primero
-    return [...alive, ...out].map((car) => {
-      const p = car.player;
-      return {
-        index: this.cars.indexOf(car),
-        name: p.name,
-        color: p.color,
-        cpu: !!p.cpuLabel,
-        driver: car.driver?.id ?? null,
-        time: car === lead ? Math.round(this.raceTime * 1000) : null,
-        gap: car.alive && car !== lead && pace > 0 ? (lead.progress - car.progress) / pace : null,
-        out: !car.alive,
-        lap: Math.min(this.laps, this.track.lap(car)),
-      };
-    });
+    const order = this.cars
+      .map((car, i) => ({ car, i, wins: this.scores[i] }))
+      .sort((a, b) => (b.car === winner) - (a.car === winner) || b.wins - a.wins || a.i - b.i);
+    return order.map(({ car, i, wins }) => ({
+      index: i,
+      name: car.player.name,
+      color: car.player.color,
+      cpu: !!car.player.cpuLabel,
+      driver: car.driver?.id ?? null,
+      wins,
+    }));
   }
 
   // ---------------------------------------------------------------- sonido
@@ -539,14 +596,19 @@ export class Game {
     return this.drivers?.[i] ? 0.5 : 1;
   }
 
-  /** Cada cuadro: motores, sonidos de los autos, vueltas y la intensidad de la música. */
+  /** Cada cuadro: motores, sonidos de los autos y la música según el momento de la ronda. */
   updateAudio(dt) {
     if (this.startCue) {
       this.startCue = false;
-      audio.music.play('race', 0);
-      audio.play('race-start');
+      audio.music.stop(); // silencio con los motores en marcha durante la cuenta
     }
-    const racing = this.state === 'racing';
+    if (this.state === 'racing' && this.audioState === 'countdown') audio.music.play('race', this.musicIntensity());
+    if (this.state === 'celebrate' && this.audioState === 'racing') {
+      audio.music.stop();
+      audio.play(this.celebrant >= 0 ? 'round-win' : 'eliminated');
+    }
+    this.audioState = this.state;
+    const racing = this.state === 'racing' || this.state === 'countdown' || this.state === 'celebrate';
     audio.engines.update(
       dt,
       racing ? this.cars : [],
@@ -558,32 +620,29 @@ export class Game {
       for (const [name, strength] of car.sounds) this.sfx(name, { car, strength });
       car.sounds.length = 0;
     }
-    if (!racing) return;
-    // Vueltas: suena cada vuelta completada; la primera vez que alguien entra en la última, cambia la música
-    this.cars.forEach((car, i) => {
-      const lap = Math.min(this.laps, this.track.lap(car));
-      if (lap <= this.lapsSeen[i]) return;
-      this.lapsSeen[i] = lap;
-      if (lap === this.laps && !this.finalLap) {
-        this.finalLap = true;
-        audio.play('final-lap');
-        audio.music.setIntensity(1);
-      } else audio.play('lap', { gain: this.loudness(car), minGap: 0.2 });
-    });
   }
 
   updateHUD() {
+    for (const car of this.cars) car.setHealth(car.health / GAME_CONFIG.health.max);
+    // Cartel de largada: 3, 2, 1 y "¡YA!"
+    this.hud.setStart(this.state === 'countdown' ? Math.max(1, Math.ceil(this.countdown)) : this.goTimer > 0 ? 'go' : null);
+    // Ronda en curso y cartel del ganador de la ronda (también en los invitados, con lo que manda el anfitrión)
+    this.hud.setRound(this.round, this.rounds, this.tiebreak);
+    if (this.state === 'celebrate') {
+      const champ = this.cars[this.celebrant];
+      this.hud.showRoundWinner(champ ? { name: champ.player.name, color: champ.player.color, wins: this.scores[this.celebrant], round: this.round } : null);
+    } else this.hud.hideRoundWinner();
     const ranking = [...this.cars].sort((a, b) => b.progress - a.progress);
     this.hud.update(
       this.cars.map((car, i) => ({
-        lap: Math.min(this.laps, this.track.lap(car)),
+        wins: this.scores?.[i] ?? 0,
         place: ranking.indexOf(car) + 1,
         state: car.state,
         falling: car.falling,
         item: this.powerups.inventory(car).item,
+        ammo: this.powerups.inventory(car).ammo,
         effects: this.powerups.effects.list(car),
-        countdown: car.state !== PlayerState.OUT_OF_SCREEN ? null : this.net && !this.net.isHost ? car.netCountdown : this.tracker.countdown(i),
-        ndc: this.rig.toNDC(car.position),
+        health: car.health / GAME_CONFIG.health.max,
       })),
     );
   }

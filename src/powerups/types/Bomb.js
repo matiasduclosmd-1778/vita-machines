@@ -125,6 +125,7 @@ class BombProjectile {
     const { ctx } = this;
     ctx.explosion(this.pos, 1);
     if (!ctx.tryAffect(target, { strong: true })) return;
+    ctx.damage(target, CFG.damage);
 
     // Empujón: mezcla de la dirección de la bomba y del centro de la explosión hacia el auto
     const dir = new THREE.Vector3(target.position.x - this.pos.x, 0, target.position.z - this.pos.z).normalize();

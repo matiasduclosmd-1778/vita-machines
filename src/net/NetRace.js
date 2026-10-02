@@ -34,7 +34,7 @@ export class HostSync {
 
     session.on('input', (m) => {
       const i = this.ids.indexOf(m.id);
-      if (i >= 0) this.inputs[i] = { throttle: clamp1(m.th), steer: clamp1(m.st) };
+      if (i >= 0) this.inputs[i] = { throttle: clamp1(m.th), steer: clamp1(m.st), fire: !!m.fi };
     });
     session.on('use', (m) => {
       const i = this.ids.indexOf(m.id);
@@ -85,6 +85,10 @@ export class HostSync {
       t: 's',
       n: ++this.seq,
       st: g.state,
+      cd: r2(g.countdown ?? 0),
+      // Rondas: número, total, ronda extra, marcador y quién festeja (-1 = nadie)
+      rd: [g.round, g.rounds, g.tiebreak ? 1 : 0, g.celebrant ?? -1],
+      sc: g.scores,
       res: g.result,
       c: g.cars.map((car, i) => [
         r2(car.position.x),
@@ -99,9 +103,11 @@ export class HostSync {
         r2(car.blink),
         (car.alive ? ALIVE : 0) | (car.fall ? FALLING : 0) | (car.grounded ? GROUNDED : 0) | (car.state === PlayerState.OUT_OF_SCREEN ? OUT : 0),
         r2(car.progress),
-        g.tracker.countdown(i) ?? 0,
+        Math.round(car.health),
         pu.inventory(car).item?.id ?? '',
         pu.effects.list(car).map((e) => [e.id, r2(e.remaining), e.netExtra?.()]),
+        r2(car.twirl?.angle ?? 0), // vuelta del festejo
+        pu.inventory(car).ammo, // balas del arma
       ]),
       b: pu.boxes.map((b) => (b.active ? 1 : 0)).join(''),
       e: pu.entities.filter((e) => e.netKind).map((e) => [e.netId, e.netKind, ...e.netState().map(r3)]),
@@ -173,6 +179,9 @@ export class GuestSync {
       for (const ev of snap.s.ev) this.playEvent(ev);
     }
     g.state = shown.s.st;
+    g.countdown = shown.s.cd ?? 0;
+    if (shown.s.rd) [g.round, g.rounds, g.tiebreak, g.celebrant] = [shown.s.rd[0], shown.s.rd[1], !!shown.s.rd[2], shown.s.rd[3]];
+    if (shown.s.sc) g.scores = shown.s.sc;
     if (shown.s.st === 'finished' && shown.s.res && !this.shownResult) {
       this.shownResult = true;
       g.result = shown.s.res;
@@ -201,7 +210,10 @@ export class GuestSync {
       car.blink = q[9];
       car.fall = flags & FALLING ? { timer: 1 } : null;
       car.progress = lerp(11);
-      car.netCountdown = q[12] || null;
+      if (q[12] < car.health) car.hurt = 1; // destello de daño también en el invitado
+      car.health = q[12];
+      car.netTwirl = q[15] || 0;
+      g.powerups.inventory(car).ammo = q[16] ?? 0;
       if (!(flags & ALIVE)) {
         if (car.alive) car.eliminate();
       } else car.state = flags & OUT ? PlayerState.OUT_OF_SCREEN : PlayerState.NORMAL;
@@ -283,9 +295,9 @@ export class GuestSync {
   sendInput() {
     const axis = this.game.localAxis();
     const t = now();
-    const changed = axis.throttle !== this.sent.throttle || axis.steer !== this.sent.steer;
+    const changed = axis.throttle !== this.sent.throttle || axis.steer !== this.sent.steer || axis.fire !== this.sent.fire;
     if ((changed && t - this.sent.at > 1 / NET.inputRate) || t - this.sent.at > 0.5) {
-      this.session.sendInput({ th: axis.throttle, st: axis.steer });
+      this.session.sendInput({ th: axis.throttle, st: axis.steer, fi: axis.fire ? 1 : 0 });
       this.sent = { ...axis, at: t };
     }
   }

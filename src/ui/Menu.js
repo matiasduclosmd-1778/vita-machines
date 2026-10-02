@@ -5,6 +5,7 @@ import { OnlineScreens } from './OnlineScreens.js';
 import { input, parsePad, MAX_PADS } from '../Input.js';
 import { pilotImage, vehicleImage, initials, breakableName } from './pilots.js';
 import { audio } from '../audio/index.js';
+import { padGlyph, decoratePadButtons, padMode } from './padHints.js';
 
 const PLAYERS = GAME_CONFIG.players;
 const VERSION = 'v0.3.0 · Local hasta 4 jugadores (teclado o joystick) · Online hasta 6';
@@ -12,18 +13,20 @@ const VERSION = 'v0.3.0 · Local hasta 4 jugadores (teclado o joystick) · Onlin
 const TIPS = [
   'Llegá rápido a la rampa rayada: si vas lento, no alcanzás la plataforma.',
   'La regla del atajo no tiene barandas: es más corta, pero si caés perdés tiempo.',
-  'Si quedás 3 segundos fuera de pantalla, quedás eliminado.',
+  'Si la cámara te deja atrás, quedás eliminado. Y si te quedás sin vida, también.',
+  'Cada ronda la gana el último que queda en pie. Gana la partida el que más rondas gana.',
+  'Bomba: -35 de vida. Misil: -80. Imán: -15. El escudo te salva de todo.',
   'El escudo te protege de la bomba, el misil, el aceite y el imán.',
   'El misil 🎯 persigue al rival por la pista: lanzalo cuando lo tengas adelante.',
   'En el borde del escritorio no hay baranda: frená antes de la curva.',
   'El turbo sirve para recuperar terreno cuando la cámara te está dejando atrás.',
   'Online: creá un lobby y pasales el código de 6 letras a tus amigos (hasta 6 jugadores).',
-  'Con la moto podés saltar por encima de los autos (Shift o Y del joystick).',
+  'Todos pueden saltar por encima de los autos (Shift o A del joystick). La moto salta más alto.',
   'En local pueden correr hasta 4 autos, entre personas y CPU. Los joysticks y nombres se eligen en Jugadores.',
 ];
 
 const MODES = [
-  { id: 'race', title: 'Carrera', desc: 'Llegá primero y dejá al rival fuera de pantalla.', ready: true },
+  { id: 'race', title: 'Carrera', desc: 'Ganá rondas: dejá a los rivales atrás o sin vida.', ready: true },
   { id: 'crash', title: 'Choque total', desc: 'Derribá máquinas rivales en la arena.', ready: false },
   { id: 'core', title: 'Núcleo', desc: 'Capturá y defendé el núcleo del barrio.', ready: false },
 ];
@@ -33,7 +36,7 @@ const LOCAL = GAME_CONFIG.localPlayers;
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const rivalText = (r) =>
   plural(r.humans, 'jugador', 'jugadores') + (r.cpus ? ` + ${plural(r.cpus, 'CPU', 'CPU')} · ${DIFFICULTIES[r.difficulty].label}` : '');
-const LAP_OPTIONS = GAME_CONFIG.race.lapOptions;
+const ROUND_OPTIONS = GAME_CONFIG.race.roundOptions;
 const POWERUP_AMOUNTS = { off: 'No', ...Object.fromEntries(Object.entries(POWERUP_CONFIG.itemBoxes.amounts).map(([id, a]) => [id, a.label])) };
 const powerupsText = (r) => (r.powerups === 'off' ? 'Sin objetos' : POWERUP_AMOUNTS[r.powerups]);
 const DRIVERS = GAME_CONFIG.drivers;
@@ -82,7 +85,7 @@ export class Menu {
     this.root = root;
     this.settings = settings;
     this.cb = callbacks;
-    this.race = { name: 'Carrera en el escritorio', mode: 'race', map: 'desk', powerups: 'normal', laps: GAME_CONFIG.race.laps, difficulty: 'normal', humans: LOCAL.humans, cpus: LOCAL.cpus };
+    this.race = { name: 'Carrera en el escritorio', mode: 'race', map: 'desk', powerups: 'normal', rounds: GAME_CONFIG.race.rounds, difficulty: 'normal', humans: LOCAL.humans, cpus: LOCAL.cpus };
     this.thumbs = { map: null, car: null };
     this.listening = null;
 
@@ -103,7 +106,11 @@ export class Menu {
     window.addEventListener('keydown', (e) => this.onKey(e), true);
     // Joysticks: la cruceta o el stick mueven el foco, A elige, B vuelve
     input.onPress((code) => this.onPad(code));
-    window.addEventListener('mousemove', () => root.classList.remove('vm-padnav'));
+    // Ayuda del mando (solo en modo mando): mover, elegir, volver
+    this.stage.insertAdjacentHTML(
+      'beforeend',
+      `<div class="vm-padbar pad-only">${padGlyph('A', { always: true })} Elegir ${padGlyph('B', { always: true })} Volver <span class="vm-padbar-move">✚</span> Mover</div>`,
+    );
     // Sonidos de la interfaz: pasar por encima de un botón y elegirlo (volver tiene el suyo)
     const control = (e) => e.target.closest?.('button:not([disabled]), .vm-pk-card');
     root.addEventListener('click', (e) => {
@@ -150,6 +157,17 @@ export class Menu {
     this.layer.firstElementChild?.classList.add('vm-enter');
     this.layer.querySelectorAll('[data-back]').forEach((b) => b.addEventListener('click', () => back?.()));
     onMount?.(this.layer);
+    decoratePadButtons(this.layer);
+    if (padMode()) this.focusDefault(this.layer);
+  }
+
+  /** Foco en la acción principal (data-default, o el botón amarillo, o el primero): A la elige de entrada. */
+  focusDefault(scope = this.modal ?? this.layer) {
+    const el =
+      scope.querySelector('[data-default]:not([disabled])') ??
+      scope.querySelector('.vm-btn.yellow:not([disabled])') ??
+      scope.querySelector('button:not([disabled])');
+    el?.focus({ preventScroll: true });
   }
 
   onKey(e) {
@@ -179,9 +197,14 @@ export class Menu {
     const pad = parsePad(code);
     if (!pad || !this.visible) return false;
     if (this.listening) return true;
-    this.root.classList.add('vm-padnav');
     if (!this.modal && this.screenKey?.(code)) return true;
     const b = pad.button;
+    // Atajos: el botón con [data-pad="X" | "Y" | "Start"] de la pantalla (o del diálogo abierto)
+    if (b === 'X' || b === 'Y' || b === 'Start') {
+      const target = [...(this.modal ?? this.layer).querySelectorAll(`[data-pad="${b}"]`)].find((e) => !e.disabled && e.getClientRects().length);
+      if (target) target.click();
+      return true;
+    }
     if (b === 'B' || b === 'Back') {
       audio.play('ui-back');
       if (this.modal) this.modalCancel?.();
@@ -191,7 +214,7 @@ export class Menu {
     } else if (b === 'A') {
       const el = document.activeElement;
       if (el && el !== document.body && this.root.contains(el)) el.click();
-      else this.moveFocus(b);
+      else this.focusDefault();
     }
     return true;
   }
@@ -205,7 +228,7 @@ export class Menu {
     if (!items.length) return;
     const cur = items.includes(document.activeElement) ? document.activeElement : null;
     const delta = { Up: [0, -1], Down: [0, 1], Left: [-1, 0], Right: [1, 0] }[dir];
-    if (!cur || !delta) return items[0].focus();
+    if (!cur || !delta) return this.focusDefault(scope);
     const center = (el) => {
       const r = el.getBoundingClientRect();
       return [r.left + r.width / 2, r.top + r.height / 2];
@@ -245,6 +268,8 @@ export class Menu {
     this.modalHost.innerHTML = `<div class="vm-modal">${html}</div>`;
     this.modal = this.modalHost.firstElementChild;
     this.modalCancel = onCancel;
+    decoratePadButtons(this.modal);
+    if (padMode()) setTimeout(() => this.modal && this.focusDefault(this.modal));
     return this.modal;
   }
 
@@ -257,7 +282,7 @@ export class Menu {
   header(title, backLabel = 'VOLVER') {
     return `
       <div class="vm-header">
-        <button class="vm-btn dark vm-back" data-back>‹ ${backLabel} <span class="vm-kbd">ESC</span></button>
+        <button class="vm-btn dark vm-back" data-back>‹ ${backLabel} <span class="vm-kbd kbd-hint">ESC</span></button>
         <div class="vm-display">${title}</div>
         <div class="vm-stripe"></div>
       </div>`;
@@ -322,7 +347,7 @@ export class Menu {
             <div class="vm-stripe"></div>
           </div>
           <div style="display:flex;flex-direction:column;gap:22px;width:560px">
-            <button class="vm-btn yellow hero" data-go="create"><span>CREAR PARTIDA</span><span>›</span></button>
+            <button class="vm-btn yellow hero" data-go="create" data-default><span>CREAR PARTIDA</span><span>›</span></button>
             <button class="vm-btn" data-go="online"><span>JUGAR ONLINE</span><span>›</span></button>
             <button class="vm-btn" data-go="keys"><span>JUGADORES</span><span>›</span></button>
             <button class="vm-btn" data-go="config"><span>CONFIGURACIÓN</span><span>›</span></button>
@@ -414,9 +439,9 @@ export class Menu {
           <div class="vm-panel" style="padding:30px;display:flex;flex-direction:column;gap:20px">
             <div style="display:flex;flex-direction:column;gap:20px">
               <div style="display:flex;flex-direction:column;gap:14px">
-                <div class="vm-label">VUELTAS</div>
-                <div class="vm-seg" style="grid-template-columns:repeat(${LAP_OPTIONS.length},1fr)" data-laps>
-                  ${LAP_OPTIONS.map((n) => `<button class="${r.laps === n ? 'on' : ''}" data-v="${n}">${n}</button>`).join('')}
+                <div class="vm-label">RONDAS</div>
+                <div class="vm-seg" style="grid-template-columns:repeat(${ROUND_OPTIONS.length},1fr)" data-rounds>
+                  ${ROUND_OPTIONS.map((n) => `<button class="${r.rounds === n ? 'on' : ''}" data-v="${n}">${n}</button>`).join('')}
                 </div>
               </div>
               <div style="display:flex;flex-direction:column;gap:14px">
@@ -431,12 +456,12 @@ export class Menu {
               <div class="vm-muted" style="font-weight:800;font-size:22px">Resumen de la partida</div>
             </div>
             <div style="display:flex;flex-direction:column;font-weight:800;font-size:24px">
-              ${[['Modo', 'Carrera', ''], ['Mapa', 'El Escritorio', ''], ['Corredores', rivalText(r), 'data-summary-rival'], ['Vueltas', r.laps, 'data-summary-laps'], ['Power-ups', powerupsText(r), 'data-summary-pu']].map(([k, v, attr]) => `
+              ${[['Modo', 'Carrera', ''], ['Mapa', 'El Escritorio', ''], ['Corredores', rivalText(r), 'data-summary-rival'], ['Rondas', r.rounds, 'data-summary-rounds'], ['Power-ups', powerupsText(r), 'data-summary-pu']].map(([k, v, attr]) => `
                 <div style="display:flex;justify-content:space-between;padding:14px 0;border-bottom:2px solid var(--vm-line)">
                   <span class="vm-muted">${k}</span><span ${attr}>${v}</span>
                 </div>`).join('')}
             </div>
-            <button class="vm-btn yellow hero center" style="margin-top:auto" data-start>¡A CORRER!</button>
+            <button class="vm-btn yellow hero center" style="margin-top:auto" data-start data-pad="Start" data-default>¡A CORRER!</button>
           </div>
         </div>
       </div>`, {
@@ -452,10 +477,10 @@ export class Menu {
           el.querySelectorAll('[data-powerups] button').forEach((x) => x.classList.toggle('on', x === b));
           el.querySelector('[data-summary-pu]').textContent = powerupsText(r);
         }));
-        el.querySelectorAll('[data-laps] button').forEach((b) => b.addEventListener('click', () => {
-          r.laps = +b.dataset.v;
-          el.querySelectorAll('[data-laps] button').forEach((x) => x.classList.toggle('on', x === b));
-          el.querySelector('[data-summary-laps]').textContent = r.laps;
+        el.querySelectorAll('[data-rounds] button').forEach((b) => b.addEventListener('click', () => {
+          r.rounds = +b.dataset.v;
+          el.querySelectorAll('[data-rounds] button').forEach((x) => x.classList.toggle('on', x === b));
+          el.querySelector('[data-summary-rounds]').textContent = r.rounds;
         }));
         const seg = (sel, apply) => el.querySelectorAll(`${sel} button`).forEach((b) => b.addEventListener('click', () => {
           apply(b.dataset.v);
@@ -498,7 +523,10 @@ export class Menu {
     const pads = this.settings.pads;
     const name = (i) => (i < r.humans ? players[i].humanName ?? players[i].name : cpus.length > 1 ? `CPU ${i - r.humans + 1}` : 'CPU');
     const tag = (i) => (i < r.humans ? `J${i + 1}` : cpus.length > 1 ? `CPU${i - r.humans + 1}` : 'CPU');
-    const keys = (i) => `<kbd>${keyLabel(controls[i].left)}</kbd><kbd>${keyLabel(controls[i].right)}</kbd> elegir <kbd>${keyLabel(controls[i].use)}</kbd> confirmar${pads[i] != null ? ` · 🎮${pads[i] + 1}` : ''}`;
+    // Teclas de cada jugador y, si tiene joystick, sus botones (cruceta elige, A confirma)
+    const keys = (i) =>
+      `<span class="kbd-hint"><kbd>${keyLabel(controls[i].left)}</kbd><kbd>${keyLabel(controls[i].right)}</kbd> elegir <kbd>${keyLabel(controls[i].use)}</kbd> confirmar</span>` +
+      (pads[i] != null ? ` <span>🎮${pads[i] + 1} ✚ elegir ${padGlyph('A', { always: true })} confirmar</span>` : '');
     const sub = `${plural(r.humans, 'JUGADOR', 'JUGADORES')}${r.cpus ? ` · ${r.cpus} CPU · ${DIFFICULTIES[r.difficulty].label.toUpperCase()}` : ''}`;
     /** A quién le toca: la primera persona sin confirmar (null = ya eligieron todas). */
     const turn = () => humans.find((h) => !st.ready[h]) ?? null;
@@ -521,7 +549,7 @@ export class Menu {
           </div>
           <div style="display:flex;align-items:center;gap:22px">
             <span class="vm-pk-status" data-status aria-live="polite"></span>
-            <button class="vm-btn yellow vm-pk-cta" data-cta><span data-cta-text></span><span>›</span></button>
+            <button class="vm-btn yellow vm-pk-cta" data-cta data-pad="Start"><span data-cta-text></span><span>›</span></button>
           </div>
         </div>
       </div>`, {
@@ -695,7 +723,7 @@ export class Menu {
         </div>`;
     };
     const general = [['Reiniciar', 'R'], ['Pausa / menú', 'ESC'], ['Silenciar', 'M'], ['Debug', 'V'], ['Calidad gráfica', 'G']];
-    const padHelp = [['Girar', 'Stick / cruceta'], ['Acelerar', 'RT o A'], ['Frenar', 'LT o B'], ['Usar objeto', 'X, RB o LB'], ['Saltar (moto)', 'Y'], ['Pausa', 'Start']];
+    const padHelp = [['Girar', 'Stick / cruceta'], ['Acelerar', 'RT'], ['Frenar', 'LT o B'], ['Saltar', 'A'], ['Usar objeto', 'X (mantener = automático)'], ['Pausa', 'Start']];
     this.render(`
       <div class="vm-screen">
         ${this.header('JUGADORES Y CONTROLES')}
@@ -708,7 +736,7 @@ export class Menu {
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center">
           <div style="font-weight:800;font-size:24px">${this.listening ? 'Pulsá la tecla nueva… (ESC cancela)' : 'Escribí el nombre de cada jugador. Hacé clic en una tecla para reasignarla (si ya está en uso, se intercambian) o en el joystick para cambiarlo.'}</div>
-          <button class="vm-btn dark small" style="height:76px;font-size:30px" data-reset>RESTABLECER</button>
+          <button class="vm-btn dark small" style="height:76px;font-size:30px" data-reset data-pad="Y">RESTABLECER</button>
         </div>
       </div>`, {
       back: () => this.showHome(),
@@ -803,7 +831,6 @@ export class Menu {
       'video.quality': [['high', 'Alta'], ['low', 'Baja']],
       'video.shadows': [['high', 'Altas'], ['low', 'Bajas'], ['off', 'Desactivadas']],
       'video.renderScale': [[1, '100 %'], [0.75, '75 %'], [0.5, '50 %']],
-      'game.outCountdown': [[2, '2 segundos'], [3, '3 segundos'], [4, '4 segundos'], [5, '5 segundos']],
     };
     const row = (label, control, hint = '') => `<div class="vm-row"><span>${label}${hint ? `<span class="hint">${hint}</span>` : ''}</span>${control}</div>`;
     const toggle = (key, on) => `<button class="vm-toggle ${on ? 'on' : ''}" data-toggle="${key}"></button>`;
@@ -831,7 +858,6 @@ export class Menu {
       ].join('');
     } else {
       content = [
-        row('Tiempo fuera de pantalla', stepper('game.outCountdown', OPTIONS['game.outCountdown'], g.outCountdown), 'Cuánto aguanta un piloto fuera de la zona segura'),
         row('Panel de debug', toggle('game.debug', g.debug), 'También con la tecla V durante la carrera'),
       ].join('');
     }
@@ -847,8 +873,8 @@ export class Menu {
           <div class="vm-panel" style="padding:24px 44px;display:flex;flex-direction:column">
             ${content}
             <div style="display:flex;justify-content:flex-end;gap:24px;margin-top:auto;padding-top:24px">
-              <button class="vm-btn dark small" style="height:76px;font-size:30px" data-defaults>RESTABLECER</button>
-              <button class="vm-btn yellow small" style="height:76px;font-size:30px" data-apply>APLICAR</button>
+              <button class="vm-btn dark small" style="height:76px;font-size:30px" data-defaults data-pad="Y">RESTABLECER</button>
+              <button class="vm-btn yellow small" style="height:76px;font-size:30px" data-apply data-pad="X">APLICAR</button>
             </div>
           </div>
         </div>
@@ -925,7 +951,7 @@ export class Menu {
           <div class="text" data-text>Se cerrará el juego. Tus ajustes ya están guardados.</div>
           <div class="actions">
             <button class="vm-btn center" data-cancel>CANCELAR</button>
-            <button class="vm-btn red stroked center" data-quit>SALIR</button>
+            <button class="vm-btn red stroked center" data-quit data-pad="X">SALIR</button>
           </div>
         </div>
       </div>`, { onCancel: () => this.closeModal() });
@@ -959,9 +985,9 @@ export class Menu {
           <div class="title">Pausa</div>
           <div class="text">La carrera está detenida.</div>
           <div class="actions three">
-            <button class="vm-btn yellow center" data-resume>CONTINUAR</button>
-            <button class="vm-btn center" data-restart>REINICIAR CARRERA</button>
-            <button class="vm-btn red stroked center" data-menu>MENÚ PRINCIPAL</button>
+            <button class="vm-btn yellow center" data-resume data-pad="Start" data-default>CONTINUAR</button>
+            <button class="vm-btn center" data-restart data-pad="Y">REINICIAR PARTIDA</button>
+            <button class="vm-btn red stroked center" data-menu data-pad="X">MENÚ PRINCIPAL</button>
           </div>
         </div>
       </div>`, { onCancel: resume });

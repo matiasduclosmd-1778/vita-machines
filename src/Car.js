@@ -13,7 +13,7 @@ const WHEEL_RADIUS = 0.32;
 // Etiqueta con el nombre sobre el auto: canvas de LABEL_W×LABEL_H px, LABEL_SIZE unidades de alto
 const LABEL_W = 512;
 const LABEL_H = 128;
-const LABEL_SIZE = 0.85;
+const LABEL_SIZE = 1.0;
 const TUMBLE_CENTER = 0.6; // altura del eje sobre el que gira la carrocería al dar vueltas
 
 /** Multiplicadores neutros. Los efectos de power-ups los modifican cada paso (ver EffectManager). */
@@ -60,6 +60,8 @@ export class Car {
 
   reset(x, z, heading, y = 0) {
     this.state = PlayerState.NORMAL;
+    this.health = GAME_CONFIG.health.max;
+    this.hurt = 0; // destello al recibir daño (1 → 0)
     this.falls = 0;
     this.safeS = null;
     this.respawnAt(x, y, z, heading, 0);
@@ -85,6 +87,7 @@ export class Car {
     this.spin = 0; // giro extra provocado por golpes
     this.spinOut = 0; // segundos que le quedan de trompo sin control (vehículos frágiles)
     this.jumpCooldown = 0;
+    this.twirl = null; // vuelta del festejo (ver hop)
     this.sounds = []; // sonidos pendientes (choques, saltos…): los reproduce Game cada cuadro
     this.soundAt ??= {};
     this.knockSide = 1;
@@ -237,7 +240,7 @@ export class Car {
   }
 
   /**
-   * Salto (solo vehículos con `jump`, como la moto): despega con velocidad vertical; la gravedad
+   * Salto (todos los vehículos; la moto, un poco más alto): despega con velocidad vertical; la gravedad
    * y el aterrizaje los maneja Terrain. En el aire pasa por encima de autos y obstáculos.
    */
   jump() {
@@ -249,6 +252,20 @@ export class Car {
     this.jumpCooldown = J.cooldown;
     this.sound('jump');
     return true;
+  }
+
+  /**
+   * Festejo del ganador de la ronda: un saltito con una vuelta completa sobre sí mismo
+   * (giro amigable, solo visual) en sentido `dir` (1 / -1).
+   */
+  hop(dir = 1) {
+    if (this.fall) return;
+    this.grounded = false;
+    this.vy = Math.max(this.vy, 12);
+    this.airTime = 0;
+    const air = (2 * this.vy) / GAME_CONFIG.terrain.gravity;
+    this.twirl = { angle: 0, total: dir * Math.PI * 2, rate: (dir * Math.PI * 2) / air };
+    this.sound('jump');
   }
 
   /** Pide un sonido de este auto (ver Game.playCarSounds). Cada uno, como mucho cada 0,15 s. */
@@ -289,7 +306,14 @@ export class Car {
     const horiz = Math.max(4, Math.abs(this.forwardSpeed));
     const targetSlope = -Math.atan(this.vy / horiz) * Math.sign(this.forwardSpeed || 1);
     this.slope += (clamp(targetSlope, -0.6, 0.6) - this.slope) * (1 - Math.exp(-12 * dt));
-    this.mesh.rotation.set(this.slope, this.heading, 0, 'YXZ');
+    // Vuelta del festejo (en el invitado llega el ángulo del anfitrión: netTwirl)
+    const tw = this.twirl;
+    if (tw) {
+      tw.angle += tw.rate * dt * (this.grounded ? 4 : 1); // si aterriza antes, completa la vuelta rápido
+      if (Math.abs(tw.angle) >= Math.abs(tw.total)) this.twirl = null;
+    }
+    const twirl = this.twirl ? this.twirl.angle : this.netTwirl ?? 0;
+    this.mesh.rotation.set(this.slope, this.heading + twirl, 0, 'YXZ');
     // Parpadeo después de reaparecer
     if (this.blink > 0) this.blink = Math.max(0, this.blink - dt);
     this.mesh.visible = this.blink <= 0 || Math.floor(this.blink * 12) % 2 === 0;
@@ -321,6 +345,7 @@ export class Car {
     this.chassis.position.x = TUMBLE_CENTER * Math.sin(tumble);
     this.chassis.position.y = Math.max(-0.1, this.bump) + TUMBLE_CENTER * (1 - Math.cos(tumble));
 
+    this.hurt = Math.max(0, (this.hurt ?? 0) - dt * 2.5);
     this.wheelAngle += (this.forwardSpeed * dt) / WHEEL_RADIUS;
     for (const w of this.wheels) w.rotation.x = this.wheelAngle;
     for (const p of this.frontPivots) p.rotation.y = this.steer * 0.45;
@@ -336,7 +361,7 @@ export class Car {
     const vehicle = GAME_CONFIG.cars.find((c) => c.id === driver?.car);
     this.lean = !!vehicle?.lean;
     this.fragile = vehicle?.fragile ?? null;
-    this.jumpSpec = vehicle?.jump ?? null;
+    this.jumpSpec = vehicle?.jump ?? GAME_CONFIG.vehicle.jump; // todos saltan
     this.mass = this.fragile?.mass ?? 1;
     this.spinOut = 0;
     const S = GAME_CONFIG.driverStats;
@@ -458,11 +483,12 @@ export class Car {
       new THREE.SpriteMaterial({ map: this.labelTexture, transparent: true, depthTest: false, toneMapped: false }),
     );
     label.scale.set(LABEL_SIZE * (LABEL_W / LABEL_H), LABEL_SIZE, 1);
-    label.position.y = 0.95;
+    label.position.y = 1.05;
     label.renderOrder = 10; // por encima de todo: se lee aunque el auto pase detrás de algo
     marker.add(arrow, label);
     this.marker = marker;
     this.mesh.add(marker);
+    this.labelHealth = 1;
     this.setLabel(this.player.name);
   }
 
@@ -471,14 +497,29 @@ export class Car {
     text = String(text ?? '').slice(0, 12);
     if (text === this.labelText) return;
     this.labelText = text;
+    this.drawLabel();
+  }
+
+  /** Vida en la etiqueta flotante (0..1): barrita debajo del nombre. */
+  setHealth(fraction) {
+    const f = Math.round(Math.max(0, Math.min(1, fraction)) * 100) / 100;
+    if (f === this.labelHealth) return;
+    this.labelHealth = f;
+    this.drawLabel();
+  }
+
+  /** Dibuja la etiqueta: nombre en una píldora del color del jugador y, abajo, la barra de vida. */
+  drawLabel() {
+    const text = this.labelText ?? '';
     const c = this.labelCanvas;
     const ctx = c.getContext('2d');
+    const pillH = 86;
     ctx.clearRect(0, 0, c.width, c.height);
-    ctx.font = `${LABEL_H * 0.56}px "Lilita One", sans-serif`;
-    const w = Math.min(c.width - 12, ctx.measureText(text).width + LABEL_H * 0.6);
+    ctx.font = `${pillH * 0.66}px "Lilita One", sans-serif`;
+    const w = Math.min(c.width - 12, ctx.measureText(text).width + pillH * 0.7);
     const x = (c.width - w) / 2;
     ctx.beginPath();
-    ctx.roundRect(x, 6, w, c.height - 12, (c.height - 12) / 2);
+    ctx.roundRect(x, 4, w, pillH - 8, (pillH - 8) / 2);
     ctx.fillStyle = this.player.color;
     ctx.fill();
     ctx.lineWidth = 8;
@@ -488,9 +529,23 @@ export class Car {
     ctx.textBaseline = 'middle';
     ctx.lineJoin = 'round';
     ctx.lineWidth = 9;
-    ctx.strokeText(text, c.width / 2, c.height / 2 + 2, w - 20);
+    ctx.strokeText(text, c.width / 2, pillH / 2 + 1, w - 20);
     ctx.fillStyle = '#fff';
-    ctx.fillText(text, c.width / 2, c.height / 2 + 2, w - 20);
+    ctx.fillText(text, c.width / 2, pillH / 2 + 1, w - 20);
+    // Barra de vida: verde → amarillo → rojo
+    const h = this.labelHealth ?? 1;
+    const bw = Math.max(w, 150);
+    const bx = (c.width - bw) / 2;
+    ctx.beginPath();
+    ctx.roundRect(bx, pillH + 6, bw, 26, 13);
+    ctx.fillStyle = '#111318';
+    ctx.fill();
+    if (h > 0) {
+      ctx.beginPath();
+      ctx.roundRect(bx + 5, pillH + 11, (bw - 10) * h, 16, 8);
+      ctx.fillStyle = h > 0.6 ? '#6fe36b' : h > 0.3 ? '#ffc93c' : '#ff4d3d';
+      ctx.fill();
+    }
     this.labelTexture.needsUpdate = true;
   }
 }

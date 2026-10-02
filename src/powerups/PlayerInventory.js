@@ -7,6 +7,7 @@ export const InventoryState = {
 export class PlayerInventory {
   constructor() {
     this.item = null;
+    this.ammo = 0; // balas (objetos con `ammo`, como la ametralladora)
   }
 
   get state() {
@@ -17,6 +18,7 @@ export class PlayerInventory {
   give(type) {
     if (this.item) return false;
     this.item = type;
+    this.ammo = type.ammo ?? 0;
     return true;
   }
 
@@ -24,10 +26,12 @@ export class PlayerInventory {
   take() {
     const item = this.item;
     this.item = null;
+    this.ammo = 0;
     return item;
   }
 
   clear() {
     this.item = null;
+    this.ammo = 0;
   }
 }

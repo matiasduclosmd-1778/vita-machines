@@ -77,6 +77,19 @@ kbd {
   75% { transform: translateX(3px); }
 }
 
+/* Vida: barrita debajo del nombre; la fila destella en rojo al recibir daño */
+.card { grid-template-areas: 'item name info' 'item hp hp' 'item sub sub'; }
+.hp { grid-area: hp; height: 6px; margin: 3px 0 1px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+.hp i { display: block; height: 100%; width: calc(var(--hp, 1) * 100%); border-radius: 3px; background: #6fe36b; transition: width 0.35s ease-out, background 0.3s; }
+.hp[data-level='mid'] i { background: #ffc93c; }
+.hp[data-level='low'] i { background: #ff4d3d; }
+.card.hit { animation: hit 0.5s ease-out; }
+@keyframes hit {
+  0% { background: rgba(255, 60, 40, 0.85); transform: translateX(-4px); }
+  30% { transform: translateX(4px); }
+  100% { background: rgba(17, 19, 24, 0.62); transform: none; }
+}
+
 /* --- Power-up del jugador: un cuadradito con el ícono ------------------- */
 .item {
   grid-area: item;
@@ -88,6 +101,9 @@ kbd {
   border: 2px dashed rgba(255, 255, 255, 0.14);
 }
 .item-icon { font-size: 18px; line-height: 1; }
+.item { position: relative; }
+.item-ammo { position: absolute; right: -6px; bottom: -6px; min-width: 16px; padding: 0 3px; border-radius: 6px; background: #111318; color: #ffd166; font: 900 10px/14px 'Nunito', sans-serif; text-align: center; }
+.item-ammo:empty { display: none; }
 .item-name, .item-key { display: none; }
 .item[data-state='HAS_ITEM'] {
   border: 2px solid #111318;
@@ -127,76 +143,7 @@ kbd {
 .hud-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 0 #111318; }
 .hud-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #111318; }
 
-/* --- Countdown ----------------------------------------------------------- */
-.countdowns {
-  position: absolute;
-  top: 24%;
-  left: 0;
-  right: 0;
-  display: flex;
-  justify-content: center;
-  gap: 60px;
-}
-.cd { text-align: center; color: var(--c); }
-.cd-label {
-  display: inline-block;
-  font-family: 'Lilita One', sans-serif;
-  font-size: 22px;
-  padding: 8px 16px;
-  border-radius: 14px;
-  color: #fff4dc;
-  background: rgba(26, 28, 35, 0.94);
-  border: 4px solid #111318;
-  box-shadow: 0 5px 0 #111318;
-}
-.cd-num {
-  font-family: 'Lilita One', sans-serif;
-  font-size: 150px;
-  line-height: 1.1;
-  -webkit-text-stroke: 14px #111318;
-  paint-order: stroke;
-  text-shadow: 0 10px 0 #111318;
-}
-.cd-num.pop { animation: pop 0.45s ease-out; }
-@keyframes pop {
-  from { transform: scale(1.8); opacity: 0.3; }
-  to { transform: scale(1); opacity: 1; }
-}
-
-/* --- Flecha hacia el jugador fuera de pantalla --------------------------- */
-.edge-arrow {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 0;
-  height: 0;
-}
-.edge-arrow .arrow {
-  position: absolute;
-  left: -34px;
-  top: -34px;
-  width: 68px;
-  height: 68px;
-  display: grid;
-  align-items: center;
-  justify-items: end;
-  font-size: 30px;
-  color: var(--c);
-  -webkit-text-stroke: 3px #111318;
-  paint-order: stroke;
-  animation: blink 0.5s infinite alternate;
-}
-.edge-arrow .tag {
-  position: absolute;
-  transform: translate(-50%, -50%);
-  font-family: 'Lilita One', sans-serif;
-  font-size: 14px;
-  color: #111318;
-  background: var(--c);
-  border: 3px solid #111318;
-  padding: 1px 7px;
-  border-radius: 8px;
-}
+/* Parpadeo (lo usa el debug) */
 @keyframes blink { to { opacity: 0.4; } }
 
 /* --- Resultado: el podio está en src/ui/podium.css --------------------- */
@@ -263,3 +210,133 @@ kbd {
 .card.me { background: rgba(17, 19, 24, 0.82); box-shadow: 0 0 0 2px var(--c); }
 .card.me .card-name::after { content: ' · TÚ'; font-size: 0.7em; color: var(--vm-cream, #fff4dc); }
 .result-actions.hidden, .result-hint.hidden { display: none; }
+
+/* --- Cuenta de largada: 3, 2, 1, ¡YA! ------------------------------------ */
+.start-count {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  z-index: 8;
+}
+.start-count span {
+  font-family: 'Lilita One', sans-serif;
+  font-size: min(34vh, 300px);
+  line-height: 1;
+  color: #ffc93c;
+  -webkit-text-stroke: 14px #111318;
+  paint-order: stroke fill;
+  text-shadow: 0 12px 0 #111318, 0 0 60px rgba(255, 201, 60, 0.45);
+}
+.start-count[data-value='go'] span { color: #6fe36b; text-shadow: 0 12px 0 #111318, 0 0 70px rgba(111, 227, 107, 0.55); }
+.start-count span.pop { animation: countPop 0.9s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+.start-count[data-value='go'] span.pop { animation: goPop 0.8s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+@keyframes countPop {
+  0% { transform: scale(2.2); opacity: 0; }
+  25% { transform: scale(1); opacity: 1; }
+  80% { transform: scale(0.92); opacity: 1; }
+  100% { transform: scale(0.8); opacity: 0; }
+}
+@keyframes goPop {
+  0% { transform: scale(0.4) rotate(-8deg); opacity: 0; }
+  30% { transform: scale(1.1) rotate(-4deg); opacity: 1; }
+  75% { transform: scale(1) rotate(-4deg); opacity: 1; }
+  100% { transform: scale(1.5) rotate(-4deg); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .start-count span.pop { animation: none; } }
+
+/* --- Rondas: indicador arriba y cartel del ganador de la ronda ------------ */
+.round-tag {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 14px;
+  border-radius: 10px;
+  background: rgba(17, 19, 24, 0.62);
+  backdrop-filter: blur(4px);
+  font-family: 'Lilita One', sans-serif;
+  font-size: 16px;
+  letter-spacing: 1px;
+  color: #fff4dc;
+}
+.card-info .wins { color: #ffc93c; }
+.round-win {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 9%; /* abajo: el ganador queda a la vista en el centro */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  z-index: 8;
+  text-align: center;
+}
+.rw-kicker {
+  font-family: 'Lilita One', sans-serif;
+  font-size: 26px;
+  letter-spacing: 3px;
+  color: #111318;
+  background: #ffc93c;
+  padding: 3px 18px 5px;
+  border: 4px solid #111318;
+  border-radius: 12px;
+  box-shadow: 0 5px 0 #111318;
+  transform: rotate(-3deg);
+}
+.rw-name {
+  font-family: 'Lilita One', sans-serif;
+  font-size: min(13vh, 110px);
+  line-height: 1.05;
+  color: var(--c);
+  -webkit-text-stroke: 10px #111318;
+  paint-order: stroke fill;
+  text-shadow: 0 9px 0 #111318;
+  max-width: 90vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rw-sub {
+  font-family: 'Lilita One', sans-serif;
+  font-size: 22px;
+  color: #fff4dc;
+  -webkit-text-stroke: 5px #111318;
+  paint-order: stroke fill;
+}
+.round-win.pop .rw-kicker { animation: rwDrop 0.5s cubic-bezier(0.2, 1.5, 0.4, 1) both; }
+.round-win.pop .rw-name { animation: rwPop 0.6s cubic-bezier(0.2, 1.5, 0.4, 1) 0.12s both; }
+.round-win.pop .rw-sub { animation: rwDrop 0.5s ease-out 0.4s both; }
+@keyframes rwPop { from { transform: scale(0.3); opacity: 0; } }
+@keyframes rwDrop { from { transform: translateY(-30px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .round-win.pop * { animation: none !important; } }
+
+/* --- Joystick: íconos de botones y modo mando (ver src/ui/padHints.js) ---- */
+.pad-glyph {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.5em;
+  height: 1.5em;
+  padding: 0 0.3em;
+  margin-left: 0.4em;
+  border-radius: 999px;
+  border: 0.14em solid #111318;
+  font: 900 0.7em/1 'Nunito', system-ui, sans-serif;
+  font-style: normal;
+  letter-spacing: 0;
+  color: #fff;
+  vertical-align: middle;
+  box-shadow: 0 0.12em 0 #111318;
+  flex: none;
+}
+.pad-a { background: #3fbf5a; }
+.pad-b { background: #e5473f; }
+.pad-x { background: #3d7bf5; }
+.pad-y { background: #ffc23a; color: #111318; }
+.pad-start, .pad-back, .pad-lb, .pad-rb { background: #2a2d36; border-radius: 0.45em; font-size: 0.55em; padding: 0 0.55em; }
+.pad-hint { display: none !important; }
+.pad-mode .pad-hint { display: inline-grid !important; }
+.pad-mode .kbd-hint { display: none !important; }
+.pad-only { display: none !important; }
+.pad-mode .pad-only { display: flex !important; }

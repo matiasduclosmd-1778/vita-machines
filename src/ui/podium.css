@@ -83,7 +83,7 @@
 .pd-btn { font-family: 'Lilita One', sans-serif; font-size: 24px; color: var(--pd-ink); background: var(--pd-cream); border: 3px solid var(--pd-ink); border-radius: 12px;
   padding: 12px 24px; box-shadow: 0 6px 0 var(--pd-ink); cursor: pointer; display: inline-flex; align-items: center; gap: 14px; transition: transform 0.08s, box-shadow 0.08s; }
 .pd-btn:active { transform: translateY(5px); box-shadow: 0 1px 0 var(--pd-ink); }
-.pd-btn:focus-visible, .vm-padnav .pd-btn:focus { outline: 4px solid #3d7bf5; outline-offset: 4px; }
+.pd-btn:focus-visible, .pad-mode .pd-btn:focus { outline: 4px solid #3d7bf5; outline-offset: 4px; }
 .pd-btn.primary { background: var(--pd-yellow); min-width: 300px; justify-content: space-between; }
 
 @media (prefers-reduced-motion: reduce) {

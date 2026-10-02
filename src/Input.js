@@ -1,12 +1,14 @@
 const BLOCKED = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Enter']);
 
-// Joysticks (Gamepad API, mapeo "standard": Xbox / PlayStation / genéricos)
-//  Stick izquierdo o cruceta: girar · RT o A: acelerar · LT o B: frenar / marcha atrás
-//  X, RB o LB: usar objeto · Y: saltar (moto) · Start: pausa
+// Joysticks (Gamepad API, mapeo "standard": Xbox / PlayStation / genéricos). Iguales para todos,
+// en local y online:
+//  Stick izquierdo o cruceta: girar · RT: acelerar · LT o B: frenar / marcha atrás
+//  A: saltar · X: usar objeto (mantener = arma automática) · Start: pausa
+//  En los menús: cruceta / stick mueven, A elige, B vuelve (ver Menu.onPad)
 // Cada botón apretado llega a onPress como un código "Pad<n>:<botón>" (n = 1, 2… en orden de conexión).
 const PAD_BUTTONS = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'Back', 'Start', 'L3', 'R3', 'Up', 'Down', 'Left', 'Right'];
-const PAD_USE = ['X', 'RB', 'LB'];
-const PAD_JUMP = ['Y'];
+const PAD_USE = ['X'];
+const PAD_JUMP = ['A'];
 const DEADZONE = 0.2;
 const STICK_PRESS = 0.6; // cuánto hay que mover el stick para que cuente como apretar una dirección
 export const MAX_PADS = 4;
@@ -95,14 +97,15 @@ export class Input {
   /** { throttle, steer } del joystick n (-1..1, steer > 0 = izquierda). */
   padAxis(n) {
     const p = this.pads[n];
-    if (!p) return { throttle: 0, steer: 0 };
+    if (!p) return { throttle: 0, steer: 0, fire: false };
     const v = (name) => p.values[PAD_BUTTONS.indexOf(name)];
     const btn = (name) => (p.buttons.has(name) ? 1 : 0);
     const stick = Math.sign(p.x) * ((Math.abs(p.x) - DEADZONE) / (1 - DEADZONE));
     const dpad = btn('Left') - btn('Right');
     return {
-      throttle: Math.max(v('RT'), v('A')) - Math.max(v('LT'), v('B')),
+      throttle: v('RT') - Math.max(v('LT'), v('B')),
       steer: Math.abs(stick) > 0 ? -stick : dpad,
+      fire: PAD_USE.some((b) => p.buttons.has(b)),
     };
   }
 
@@ -117,6 +120,7 @@ export class Input {
     return {
       throttle: clamp1(k(controls.up) - k(controls.down) + a.throttle),
       steer: clamp1(k(controls.left) - k(controls.right) + a.steer),
+      fire: !!k(controls.use) || !!a.fire, // gatillo mantenido (arma automática)
     };
   }
 

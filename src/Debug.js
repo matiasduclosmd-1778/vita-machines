@@ -5,7 +5,7 @@ const CAM = GAME_CONFIG.camera;
 
 /**
  * Herramientas de debug (GAME_CONFIG.debug.enabled / tecla V):
- *  - panel de texto con posiciones, velocidades, estados, cámara y countdown;
+ *  - panel de texto con posiciones, velocidades, estados, vida y cámara;
  *  - zona segura dibujada sobre la pantalla (el margen de peligro en rojo);
  *  - marcador sobre cada jugador con INSIDE / OUTSIDE;
  *  - ayudas 3D: punto medio, foco de cámara y línea entre jugadores.
@@ -87,7 +87,6 @@ export class Debug {
       const inside = rig.isInSafeZone(car.position);
       const px = ((ndc.x + 1) / 2) * w;
       const py = ((1 - ndc.y) / 2) * h;
-      const remaining = tracker.remaining(i);
       const outside = car.alive && !inside;
       anyOut ||= outside;
 
@@ -98,7 +97,7 @@ export class Debug {
       marker.querySelector('.label').textContent = !car.alive
         ? `${car.player.short} ELIMINATED`
         : outside
-          ? `${car.player.short} OUTSIDE ${remaining != null ? remaining.toFixed(1) + 's' : ''}`
+          ? `${car.player.short} OUTSIDE`
           : `${car.player.short} INSIDE`;
       return { ndc, px, py, inside };
     });
@@ -130,11 +129,7 @@ export class Debug {
     screen.forEach((s, i) => {
       lines.push(`  ${cars[i].player.short} Screen State: ${s.inside ? 'INSIDE' : 'OUTSIDE'}`);
     });
-    const cd = cars.map((c, i) => {
-      const r = tracker.remaining(i);
-      return `${c.player.short} ${c.alive && r != null ? r.toFixed(2) + 's' : '-'}`;
-    });
-    lines.push(`  Countdown: ${cd.join('   ')}`, 'POWER-UPS');
+    lines.push(`  Health: ${cars.map((c) => `${c.player.short} ${Math.round(c.health)}`).join('   ')}`, 'POWER-UPS');
     cars.forEach((c) => lines.push(`  ${c.player.short} ITEM: ${powerups.inventory(c).item?.id ?? 'EMPTY'}`));
     lines.push(
       `  ITEM BOXES: ${powerups.activeBoxes} / ${powerups.boxes.length}`,

@@ -54,23 +54,31 @@ Cómo funciona (`src/net/`):
 
 ## Controles
 
-| | Acelerar | Frenar / reversa | Girar | Usar objeto |
-|---|---|---|---|---|
-| Jugador 1 | W | S | A / D | Espacio |
-| Jugador 2 | ↑ | ↓ | ← / → | Enter |
+| | Acelerar | Frenar / reversa | Girar | Usar objeto | Saltar |
+|---|---|---|---|---|---|
+| Jugador 1 | W | S | A / D | Espacio | Shift izq. |
+| Jugador 2 | ↑ | ↓ | ← / → | Enter | Shift der. |
+| Jugador 3 | I | K | J / L | U | O |
+| Jugador 4 | Num 8 | Num 5 | Num 4 / 6 | Num 0 | Num Enter |
+| **Joystick** (todos igual) | RT | LT o B | Stick / cruceta | X (mantener = arma automática) | A |
 
-- `ESC`: pausa
-- `R`: reiniciar (también `Enter` en la pantalla de resultado)
-- `G`: alternar calidad gráfica alta / baja
-- `V`: activar/desactivar el modo debug (`GAME_CONFIG.debug.enabled` define el estado inicial)
+Todo se reasigna en **Jugadores** (también qué joystick usa cada uno). Todos los vehículos saltan; la moto, un poco más alto.
+
+- `ESC` / Start: pausa · `R`: reiniciar · `M`: silenciar · `G`: calidad gráfica · `V`: modo debug
+- **Menús con joystick:** al tocar el mando aparecen los botones a apretar al costado de cada acción (modo mando). Cruceta o stick mueven, A elige, B vuelve; START arranca la partida; en la pausa, Y reinicia y X va al menú; en el podio, A revancha y B menú (online: A vuelve al lobby, B sale).
 - En desarrollo, `window.game` está expuesto en la consola.
 
 ## Reglas
 
-Gana el primero que completa las vueltas elegidas (`GAME_CONFIG.race`), o el que sigue en pantalla si el otro queda eliminado.
+Cada ronda (también al reiniciar o en la revancha) empieza con una cuenta 3‑2‑1‑¡YA! (`race.countdown`): los autos quedan quietos y acelerar solo hace rugir el motor. Online la lleva el anfitrión.
 
-Cada jugador está en uno de tres estados: `NORMAL`, `OUT_OF_SCREEN` o `ELIMINATED`.
-Si sale de la zona segura (el rectángulo interno definido por `camera.safeMargin`) pasa a `OUT_OF_SCREEN` y empieza un countdown 3‑2‑1. Si vuelve antes, se cancela; si no, queda eliminado (su auto frena hasta detenerse) y gana el otro.
+La partida se juega a **rondas** (6 por defecto, `GAME_CONFIG.race.rounds`; no hay vueltas). Cada ronda la gana el último que queda en carrera. El ganador festeja: la cámara se le acerca, su vehículo da dos saltitos con una vuelta sobre sí mismo y aparece "GANADOR {nombre}". Después todos vuelven a largar.
+
+Gana la partida el que más rondas gana. Termina antes si alguien ya no puede ser alcanzado; si al final hay empate arriba, se juega una ronda extra. Si en una ronda quedan todos afuera a la vez, nadie suma y se repite.
+
+Se pierde de dos formas:
+- **Quedar atrás:** si la cámara te deja fuera de la zona segura (el rectángulo interno de `camera.safeMargin`), quedás eliminado en el acto.
+- **Quedarse sin vida:** cada jugador tiene 100 de vida (`health.max`). La bomba saca 35, el misil 80 y el imán 15 (`damage` de cada objeto en `POWERUP_CONFIG`; el aceite, 0). Con 0 el auto explota y queda eliminado. El escudo bloquea el daño. La vida se ve en la fila de cada jugador y debajo de su nombre sobre el auto.
 La cámara nunca se aleja más que `camera.maxDistance` para salvar al que va atrás.
 
 ## Piloto de la computadora (VS CPU)
@@ -89,6 +97,8 @@ Cajas "?" en la pista según la cantidad elegida (`POWERUP_CONFIG.itemBoxes`): *
 | 🛢️ OIL | Mancha detrás del auto: quien la pisa pierde grip y derrapa (el que la deja es inmune al principio) |
 | 🧲 MAGNET | Atrae moderadamente al rival si está a menos de `maxDistance` |
 | 🛡️ SHIELD | Cúpula que bloquea bomba, misil, aceite e imán (una bomba o un misil la rompen) |
+| 🔫 GUN | Ametralladora con 15 balas hacia donde apunta el vehículo, 4 de daño cada una (60 en total). Tocar "usar objeto" dispara una; mantenerlo, en automático (10 por segundo). Queda en el casillero (con contador) hasta la última bala; el escudo, las paredes y los obstáculos frenan las balas |
+| ❤️ HEART | Corazón de vida: restaura el 100% de la vida. Sale un poco menos que los demás; la CPU lo guarda hasta tener 55 o menos |
 
 Para agregar uno nuevo: crear `src/powerups/types/MiObjeto.js` con `{ id, name, icon, color, config, use(ctx, car) }`, agregar su bloque en `POWERUP_CONFIG` y registrarlo en `src/powerups/types/index.js`. Las explosiones que golpean un auto usan `ctx.blast(target, dir, cfg)` (frena, empuja, lo hace volar con `car.launch` y lo aturde). Los efectos temporales extienden `Effect` (`src/powerups/EffectManager.js`) y modifican `car.mods` (aceleración, velocidad máxima, grip, dirección, acelerador).
 

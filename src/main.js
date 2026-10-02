@@ -3,7 +3,8 @@ import { Game } from './Game.js';
 import { Menu } from './ui/Menu.js';
 import { setVehicleRenders } from './ui/pilots.js';
 import { audio } from './audio/index.js';
-import { input } from './Input.js';
+import { input, parsePad } from './Input.js';
+import { setPadMode } from './ui/padHints.js';
 import { loadSettings } from './ui/Settings.js';
 import { GAME_CONFIG } from './config.js';
 import { loadCarModel, renderCarImage } from './world/CarModel.js';
@@ -22,10 +23,14 @@ audio.setVolumes(settings.audio);
 const unlock = () => audio.unlock();
 window.addEventListener('pointerdown', unlock, true);
 window.addEventListener('keydown', unlock, true);
-input.onPress(() => {
+input.onPress((code) => {
   unlock();
+  if (parsePad(code)) setPadMode(true); // modo mando: se ven los botones del joystick en la interfaz
   return false; // no se queda con el evento
 });
+// Mouse o teclado (reales) vuelven a mostrar las teclas
+window.addEventListener('keydown', (e) => e.isTrusted && setPadMode(false), true);
+window.addEventListener('mousemove', (e) => Math.abs(e.movementX) + Math.abs(e.movementY) > 6 && setPadMode(false)); // un temblor no cuenta
 // M: silenciar / volver a escuchar
 window.addEventListener('keydown', (e) => {
   if (e.code !== 'KeyM' || e.repeat || e.target.closest?.('input')) return;

@@ -158,7 +158,7 @@ export const GAME_CONFIG = {
   //  length: largo propio (si no, vehicle.model.length) · textured: conserva su textura (no se repinta)
   //  lean: se inclina hacia adentro en las curvas (motos)
   //  fragile: vehículo liviano que sale en trompo cuando lo chocan (ver Car.knockSpin)
-  //  jump: puede saltar con la tecla de saltar (ver Car.jump)
+  //  jump: salto propio (si no, vehicle.jump; ver Car.jump)
   cars: [
     {
       id: 'corolla',
@@ -228,10 +228,7 @@ export const GAME_CONFIG = {
         knockRoll: 0.85, // cuánto queda tirada de costado mientras gira (rad)
         bump: 2, // rebote visual de los golpes, comparado con un auto
       },
-      jump: {
-        speed: 13, // velocidad vertical del salto (u/s): sube ~2 u y pasa por encima de autos y obstáculos
-        cooldown: 0.35, // segundos en el piso antes de poder volver a saltar
-      },
+      jump: { speed: 13, cooldown: 0.35 }, // la moto salta un poco más alto que los autos (ver vehicle.jump)
     },
   ],
 
@@ -258,15 +255,25 @@ export const GAME_CONFIG = {
     yawLookAhead: 24, // tramo de pista delante del líder que orienta la cámara
   },
 
+  // Quedar atrás: salir de la zona segura elimina en el acto
   outOfScreen: {
-    countdown: 3, // segundos fuera de la zona segura antes de ser eliminado
     graceTime: 1, // segundos al inicio de la ronda sin chequeo
+  },
+
+  // Vida de cada jugador (0 = queda eliminado). El daño de cada objeto está en POWERUP_CONFIG (`damage`).
+  health: {
+    max: 100,
   },
 
   vehicle: {
     length: 2.4,
     width: 1.3,
     // Modelos 3D de los autos (ver `cars`; si falla la carga se usa el auto hecho con primitivas)
+    // Salto (todos los vehículos; la moto tiene el suyo en `cars`)
+    jump: {
+      speed: 12.5, // velocidad vertical (u/s): sube ~1,9 u y pasa por encima de autos y obstáculos
+      cooldown: 0.4, // segundos en el piso antes de poder volver a saltar
+    },
     model: {
       enabled: true,
       length: 2.8, // largo al que se escala el modelo (el auto de colisión mide `length`)
@@ -392,8 +399,15 @@ export const GAME_CONFIG = {
 
   // Carrera: gana el primero que completa las vueltas (o el último que queda en pantalla)
   race: {
-    lapOptions: [5, 8, 10], // opciones de "Crear partida"
-    laps: 5, // por defecto
+    // Partida a rondas: cada ronda la gana el último que queda (los demás quedaron atrás o sin vida).
+    // Gana la partida el que más rondas gana; termina antes si ya nadie lo alcanza, y si al final
+    // hay empate arriba se juega una ronda extra.
+    roundOptions: [3, 6, 9], // opciones de "Crear partida"
+    rounds: 6, // por defecto
+    celebrate: 3.6, // segundos de festejo del ganador de la ronda (cámara cerca, saltitos con vuelta)
+    closeup: 13, // distancia de cámara durante el festejo
+    countdown: 3, // segundos de la cuenta 3…2…1 antes de largar (los autos quedan quietos)
+    goShow: 0.8, // cuánto queda en pantalla el "¡YA!"
   },
 
   ai: {
@@ -491,6 +505,7 @@ export const POWERUP_CONFIG = {
 
   bomb: {
     weight: 1,
+    damage: 35, // vida que saca (de health.max = 100)
     speed: 38, // velocidad mínima del proyectil (se suma a la del auto si va más rápido)
     lifetime: 2.2, // segundos antes de desaparecer
     maxDistance: 70,
@@ -507,6 +522,7 @@ export const POWERUP_CONFIG = {
 
   missile: {
     weight: 0.8,
+    damage: 80, // vida que saca
     launchSpeed: 22, // sale despacio del auto…
     speed: 46, // …y acelera hasta esta velocidad
     acceleration: 60,
@@ -533,6 +549,7 @@ export const POWERUP_CONFIG = {
 
   oil: {
     weight: 1,
+    damage: 0, // vida que saca (0 = no hace daño)
     lifetime: 12, // cuánto dura la mancha en la pista
     radius: 2.2,
     ownerGrace: 1.5, // el que la deja es inmune durante estos segundos
@@ -544,6 +561,7 @@ export const POWERUP_CONFIG = {
 
   magnet: {
     weight: 1,
+    damage: 15, // vida que saca (una vez por imán)
     duration: 3,
     force: 16, // aceleración hacia el usuario (u/s²)
     maxDistance: 40, // más lejos no tiene efecto
@@ -555,6 +573,25 @@ export const POWERUP_CONFIG = {
     duration: 5,
     radius: 2,
     consumeOnBomb: true, // una bomba lo rompe (pero igual protege de ese golpe)
+  },
+  // Ametralladora: balas hacia donde apunta el vehículo. Tocar = un tiro; mantener = automático
+  gun: {
+    weight: 0.9,
+    ammo: 15, // balas por arma
+    damage: 4, // vida que saca cada bala
+    fireRate: 10, // balas por segundo manteniendo apretado
+    speed: 75, // u/s (se suma la velocidad del auto)
+    lifetime: 0.75, // segundos de vuelo (alcance ~55 u)
+    spread: 0.025, // dispersión (radianes)
+    push: 1.2, // empujoncito por bala (u/s)
+    color: '#ffd166',
+  },
+  // Corazón de vida: al usarlo restaura el 100% de la vida
+  heart: {
+    weight: 0.6, // sale un poco menos que los demás
+    color: '#ff4d6d',
+    duration: 1.2, // lo que dura el efecto visual (el corazón que sube)
+    aiUseBelow: 55, // la CPU lo guarda hasta tener esta vida o menos
   },
 };
 

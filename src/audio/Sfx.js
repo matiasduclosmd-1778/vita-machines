@@ -22,18 +22,31 @@ export const SFX = {
   },
 
   // ---------------------------------------------------------------- carrera
-  'race-start': (A, out, t, o) => {
-    // Bip – bip – ¡ya! (estilo semáforo arcade)
-    blip(A, out, t, 660, 0.12, { gain: 0.1 * o.gain });
-    blip(A, out, t + 0.35, 660, 0.12, { gain: 0.1 * o.gain });
-    blip(A, out, t + 0.7, 1320, 0.35, { gain: 0.12 * o.gain, type: 'sawtooth', sends: { reverb: 0.3 } });
+  // Cuenta de largada (estilo semáforo arcade): un bip por número y uno más agudo y largo en el "¡YA!"
+  count: (A, out, t, o) => {
+    blip(A, out, t, 660, 0.16, { gain: 0.13 * o.gain, sends: { reverb: 0.2 } });
+    blip(A, out, t, 330, 0.16, { gain: 0.06 * o.gain, type: 'sawtooth', cutoff: 1500 });
   },
-  lap: (A, out, t, o) => arp(A, out, t, [76, 83], 0.07, { gain: 0.09 * o.gain, type: 'triangle', sends: { reverb: 0.3, delay: 0.2 } }),
-  'final-lap': (A, out, t, o) => {
-    arp(A, out, t, [64, 67, 71, 76, 79, 83, 88], 0.055, { gain: 0.09 * o.gain, type: 'sawtooth', cutoff: 4000, sends: { reverb: 0.35, delay: 0.3 } });
-    noise(A, out, t, { dur: 0.6, freq: 800, sweepTo: 8000, q: 1.5, gain: 0.08 * o.gain, ...S });
+  'count-go': (A, out, t, o) => {
+    blip(A, out, t, 1320, 0.5, { gain: 0.13 * o.gain, type: 'sawtooth', cutoff: 5000, sends: { reverb: 0.35, delay: 0.2 } });
+    blip(A, out, t, 660, 0.5, { gain: 0.08 * o.gain, sends: { reverb: 0.3 } });
+    noise(A, out, t, { dur: 0.6, freq: 1200, sweepTo: 9000, sweepTime: 0.4, q: 1.2, gain: 0.08 * o.gain, ...S });
+    kick(A, out, t, 0.6 * o.gain);
   },
-  'out-tick': (A, out, t, o) => blip(A, out, t, 988, 0.09, { gain: 0.11 * o.gain, pan: o.pan }),
+  // Ganador de la ronda: fanfarria corta (Do mayor, como el podio) con platillo
+  'round-win': (A, out, t, o) => {
+    arp(A, out, t, [67, 72, 76, 79], 0.07, { gain: 0.09 * o.gain, type: 'sawtooth', cutoff: 4500, sends: { reverb: 0.3 } });
+    [60, 64, 67, 72].forEach((n) => synth(A, out, t + 0.3, { freq: mtof(n), dur: 0.9, type: 'sawtooth', detune: [-9, 9], gain: 0.035 * o.gain, attack: 0.02, release: 0.5, cutoff: 3000, bus: 'sfx', sends: { reverb: 0.4 } }));
+    synth(A, out, t + 0.3, { freq: mtof(84), dur: 0.8, type: 'square', gain: 0.05 * o.gain, vibrato: 18, cutoff: 4000, bus: 'sfx', sends: { delay: 0.3, reverb: 0.3 } });
+    noise(A, out, t + 0.3, { dur: 1.2, freq: 6000, filter: 'highpass', q: 0.4, gain: 0.08 * o.gain, ...S });
+    kick(A, out, t + 0.3, 0.6 * o.gain);
+  },
+  // Daño a la vida: zumbido descendente + golpe (más fuerte cuanto más daño)
+  hurt: (A, out, t, o) => {
+    const k = Math.min(1, (o.strength ?? 35) / 80);
+    synth(A, out, t, { freq: 520, sweepTo: 110, sweepTime: 0.25, dur: 0.25, type: 'square', detune: [-20, 20], gain: (0.06 + 0.05 * k) * o.gain, cutoff: 2200, pan: o.pan, bus: 'sfx' });
+    synth(A, out, t, { freq: 160, sweepTo: 55, sweepTime: 0.15, dur: 0.15, type: 'sine', gain: (0.15 + 0.15 * k) * o.gain, pan: o.pan, bus: 'sfx' });
+  },
   eliminated: (A, out, t, o) => {
     synth(A, out, t, { freq: 440, sweepTo: 55, sweepTime: 0.7, dur: 0.7, type: 'sawtooth', detune: [-15, 15], gain: 0.12 * o.gain, cutoff: 1800, pan: o.pan, release: 0.1, bus: 'sfx', sends: { reverb: 0.3 } });
     noise(A, out, t, { dur: 0.5, freq: 400, q: 0.8, gain: 0.12 * o.gain, pan: o.pan, ...S });
@@ -59,8 +72,24 @@ export const SFX = {
   },
   'use-MAGNET': (A, out, t, o) =>
     synth(A, out, t, { freq: 220, sweepTo: 660, sweepTime: 0.6, dur: 0.6, type: 'square', gain: 0.07 * o.gain, cutoff: 1600, q: 6, vibrato: 60, vibratoRate: 14, pan: o.pan, bus: 'sfx', sends: { reverb: 0.2 } }),
+  // Disparo: golpe corto de ruido + "pew" que cae (suena bien en ráfaga)
+  'use-GUN': (A, out, t, o) => {
+    noise(A, out, t, { dur: 0.07, freq: 2600, q: 1.2, gain: 0.16 * o.gain, pan: o.pan, ...S });
+    synth(A, out, t, { freq: 950, sweepTo: 180, sweepTime: 0.07, dur: 0.07, type: 'square', gain: 0.05 * o.gain, cutoff: 3500, pan: o.pan, bus: 'sfx' });
+    synth(A, out, t, { freq: 120, sweepTo: 60, sweepTime: 0.05, dur: 0.05, type: 'sine', gain: 0.12 * o.gain, pan: o.pan, bus: 'sfx' });
+  },
+  'bullet-hit': (A, out, t, o) => {
+    synth(A, out, t, { freq: 2200, dur: 0.05, type: 'triangle', gain: 0.06 * o.gain, release: 0.06, pan: o.pan, bus: 'sfx' });
+    noise(A, out, t, { dur: 0.06, freq: 4000, q: 2, gain: 0.07 * o.gain, pan: o.pan, ...S });
+  },
   'use-SHIELD': (A, out, t, o) => {
     [72, 79, 84, 91].forEach((n, i) => synth(A, out, t + i * 0.03, { freq: mtof(n), dur: 0.5, type: 'triangle', detune: [-8, 8], gain: 0.045 * o.gain, attack: 0.02, release: 0.4, pan: o.pan, bus: 'sfx', sends: { reverb: 0.4 } }));
+  },
+  // Corazón de vida: arpegio mayor que sube, con brillo
+  'use-HEART': (A, out, t, o) => {
+    arp(A, out, t, [72, 76, 79, 84, 88, 91], 0.05, { gain: 0.07 * o.gain, type: 'triangle', pan: o.pan, sends: { reverb: 0.35, delay: 0.2 } });
+    [76, 79, 84].forEach((n) => synth(A, out, t + 0.28, { freq: mtof(n), dur: 0.6, type: 'sine', gain: 0.05 * o.gain, attack: 0.05, release: 0.5, pan: o.pan, bus: 'sfx', sends: { reverb: 0.4 } }));
+    noise(A, out, t, { dur: 0.7, freq: 5000, sweepTo: 10000, filter: 'highpass', q: 0.5, gain: 0.04 * o.gain, pan: o.pan, ...S });
   },
   'shield-hit': (A, out, t, o) => {
     synth(A, out, t, { freq: 1760, dur: 0.25, type: 'sine', gain: 0.1 * o.gain, release: 0.3, pan: o.pan, bus: 'sfx', sends: { reverb: 0.4 } });
@@ -179,9 +208,11 @@ export class EngineSounds {
       const gears = 4;
       const g = Math.min(gears - 1, Math.floor(ratio * gears));
       const inGear = ratio * gears - g;
-      const target = speed < 0.5 ? 0.18 : 0.35 + 0.65 * inGear;
+      // En la largada, acelerar quieto hace rugir el motor (car.rev)
+      const rev = speed < 1 ? (car.rev ?? 0) : 0;
+      const target = speed < 0.5 ? 0.18 + 0.75 * rev : 0.35 + 0.65 * inGear;
       v.rpm += (target - v.rpm) * Math.min(1, dt * 10);
-      const load = Math.max(0, Math.min(1, accel / 25 + (speed > 1 ? 0.25 : 0)));
+      const load = Math.max(rev, Math.min(1, accel / 25 + (speed > 1 ? 0.25 : 0)));
       const base = v.moto ? 70 : 42;
       const f = base * (1 + v.rpm * 1.8 + g * 0.18);
       v.a.frequency.setTargetAtTime(f, t, 0.03);

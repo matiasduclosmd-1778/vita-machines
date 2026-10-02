@@ -1,4 +1,4 @@
-import { GAME_CONFIG } from '../config.js';
+import { GAME_CONFIG, POWERUP_CONFIG } from '../config.js';
 import { InventoryState } from '../powerups/PlayerInventory.js';
 
 const V = GAME_CONFIG.vehicle;
@@ -147,13 +147,19 @@ export class AIDriver {
     }
 
     this.thinkItems(dt, s);
-    return { throttle, steer };
+    return { throttle, steer, fire: this.firing };
   }
 
   // ------------------------------------------------------------------ objetos
 
   thinkItems(dt, s) {
     const inv = this.game.powerups.inventory(this.car);
+    this.firing = false;
+    // Arma: ráfagas mientras tenga un rival adelante y cerca
+    if (inv.item?.id === 'GUN') {
+      this.firing = this.goodMoment('GUN', s);
+      return;
+    }
     if (!inv.item) {
       this.itemTimer = null;
       return;
@@ -168,6 +174,11 @@ export class AIDriver {
     if (this.itemTimer > 0) return;
     this.itemTimer = 0.25; // vuelve a evaluar cada cuarto de segundo
 
+    // El corazón se guarda hasta que haga falta
+    if (inv.item.id === 'HEART') {
+      if (this.car.health <= POWERUP_CONFIG.heart.aiUseBelow) this.game.powerups.use(this.car);
+      return;
+    }
     // Los pilotos menos hábiles usan el objeto en cualquier momento; al rato lo usan igual
     const smart = Math.random() < this.cfg.itemSkill;
     if (!smart || this.itemWait > 9 || this.goodMoment(inv.item.id, s)) this.game.powerups.use(this.car);
@@ -195,6 +206,8 @@ export class AIDriver {
         return rival.progress > car.progress && dist > 6 && dist < 35;
       case 'SHIELD':
         return dist < 22;
+      case 'GUN':
+        return ahead > 0.93 && dist < 45 && sameLevel;
       case 'TURBO': {
         // En recta y sin bordes peligrosos cerca (o para el salto)
         if (P.forward(s, this.takeoffS) < 45) return true;

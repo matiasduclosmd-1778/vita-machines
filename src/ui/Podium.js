@@ -1,6 +1,7 @@
 import './podium.css';
 import { GAME_CONFIG } from '../config.js';
 import { pilotImage, vehicleImage, initials, breakableName } from './pilots.js';
+import { padGlyph } from './padHints.js';
 
 // Podio del final de la carrera (diseño de Update/podio.html). Lo arma el HUD con el resultado de Game.finish.
 
@@ -27,7 +28,7 @@ export function podiumHTML() {
     <div class="pd-screen">
       <div class="pd-top">
         <div>
-          <span class="pd-kicker">CARRERA TERMINADA</span>
+          <span class="pd-kicker">PARTIDA TERMINADA</span>
           <h1 class="pd-title"></h1>
           <div class="pd-sub"></div>
           <div class="pd-hazard" aria-hidden="true"></div>
@@ -37,18 +38,18 @@ export function podiumHTML() {
       <section class="pd-podium" aria-label="Podio"></section>
       <div class="pd-rest" aria-label="Resto de los puestos"></div>
       <div class="pd-foot">
-        <div class="result-hint">o presioná <kbd>R</kbd> / <kbd>Enter</kbd> · 🎮 <kbd>A</kbd> para la revancha</div>
+        <div class="result-hint kbd-hint">o presioná <kbd>R</kbd> / <kbd>Enter</kbd> para la revancha</div>
         <div class="result-actions" data-mode="local">
-          <button class="pd-btn menu-btn">Volver al menú</button>
-          <button class="pd-btn primary restart">Revancha <span aria-hidden="true">›</span></button>
+          <button class="pd-btn menu-btn">Volver al menú ${padGlyph('B')}</button>
+          <button class="pd-btn primary restart">Revancha ${padGlyph('A')}<span class="kbd-hint" aria-hidden="true">›</span></button>
         </div>
         <div class="result-actions hidden" data-mode="host">
-          <button class="pd-btn net-leave">Cerrar lobby</button>
-          <button class="pd-btn primary net-back">Volver al lobby <span aria-hidden="true">›</span></button>
+          <button class="pd-btn net-leave">Cerrar lobby ${padGlyph('B')}</button>
+          <button class="pd-btn primary net-back">Volver al lobby ${padGlyph('A')}<span class="kbd-hint" aria-hidden="true">›</span></button>
         </div>
         <div class="result-actions hidden" data-mode="guest">
           <div class="result-wait">Esperando al anfitrión…</div>
-          <button class="pd-btn net-leave">Salir</button>
+          <button class="pd-btn net-leave">Salir ${padGlyph('B')}</button>
         </div>
       </div>
     </div>
@@ -62,7 +63,7 @@ export function podiumHTML() {
 export function renderPodium(root, result) {
   const st = result.standings ?? [];
   const lead = st[0];
-  const winnerTime = st.find((s) => s.time != null)?.time ?? null;
+  const winnerTime = st.find((s) => s.time != null)?.time ?? null; // (resultados con tiempos; las rondas usan `wins`)
   const driver = (s) => DRIVERS.find((d) => d.id === s?.driver) ?? null;
 
   // Título: el jugador que ganó y con qué piloto
@@ -80,6 +81,7 @@ export function renderPodium(root, result) {
     <div><b>${byIndex.map((s) => esc(s.name)).join(' · ')}</b><small>${st.length} CORREDORES</small></div>`;
 
   const timeText = (s) => {
+    if (s.wins != null) return [`${'★'.repeat(Math.min(s.wins, 9))}${s.wins ? '' : '—'}`, `${s.wins} ${s.wins === 1 ? 'ronda ganada' : 'rondas ganadas'}`];
     if (s.out) return ['ELIMINADO', `en la vuelta ${s.lap}`];
     if (s.time != null) return [fmt(s.time), ''];
     if (s.gap != null && winnerTime != null) return [fmt(winnerTime + s.gap * 1000), `+${s.gap.toFixed(3)} s`];

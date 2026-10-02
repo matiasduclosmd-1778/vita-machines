@@ -10,9 +10,11 @@ import { Missile, MissileView } from './Missile.js';
 import { Oil, SlippingEffect, OilView } from './Oil.js';
 import { Magnet, MagnetEffect } from './Magnet.js';
 import { Shield, ShieldEffect } from './Shield.js';
+import { Heart, HealEffect } from './Heart.js';
+import { Gun, GunEffect, BulletView } from './Gun.js';
 
-export const POWERUP_TYPES = [Turbo, Bomb, Missile, Oil, Magnet, Shield];
+export const POWERUP_TYPES = [Turbo, Bomb, Missile, Oil, Magnet, Shield, Heart, Gun];
 
 // Online: efectos y objetos en pista que el invitado recrea a partir del estado del anfitrión
-export const EFFECT_TYPES = Object.fromEntries([TurboEffect, StunnedEffect, SlippingEffect, MagnetEffect, ShieldEffect].map((E) => [E.id, E]));
-export const ENTITY_VIEWS = { bomb: BombView, missile: MissileView, oil: OilView };
+export const EFFECT_TYPES = Object.fromEntries([TurboEffect, StunnedEffect, SlippingEffect, MagnetEffect, ShieldEffect, HealEffect, GunEffect].map((E) => [E.id, E]));
+export const ENTITY_VIEWS = { bomb: BombView, missile: MissileView, oil: OilView, bullet: BulletView };

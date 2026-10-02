@@ -2,6 +2,7 @@ import { GAME_CONFIG, POWERUP_CONFIG } from '../config.js';
 import { keyLabel } from './Settings.js';
 import { parsePad } from '../Input.js';
 import { audio } from '../audio/index.js';
+import { padGlyph } from './padHints.js';
 import { esc, pilotCardsHTML } from './Menu.js';
 import { transportKind } from '../net/transport.js';
 
@@ -10,7 +11,7 @@ import { transportKind } from '../net/transport.js';
 
 const NET = GAME_CONFIG.online;
 const DRIVERS = GAME_CONFIG.drivers;
-const LAP_OPTIONS = GAME_CONFIG.race.lapOptions;
+const ROUND_OPTIONS = GAME_CONFIG.race.roundOptions;
 const POWERUP_AMOUNTS = { off: 'No', ...Object.fromEntries(Object.entries(POWERUP_CONFIG.itemBoxes.amounts).map(([id, a]) => [id, a.label])) };
 const slotColor = (slot) => NET.slots[slot]?.color ?? '#9aa0ad';
 const powerupsText = (id) => (id === 'off' ? 'Sin objetos' : POWERUP_AMOUNTS[id]);
@@ -76,7 +77,7 @@ export const OnlineScreens = {
               <button class="vm-btn dark small" data-refresh>↻ ACTUALIZAR</button>
             </div>
             <div class="vm-table-head vm-label vm-net-row" style="font-size:17px">
-              <span>LOBBY</span><span>VUELTAS</span><span>POWER-UPS</span><span>JUGADORES</span><span></span>
+              <span>LOBBY</span><span>RONDAS</span><span>POWER-UPS</span><span>JUGADORES</span><span></span>
             </div>
             <div data-list><div class="vm-muted vm-net-empty">Buscando lobbies…</div></div>
             ${local ? '<div class="vm-muted" style="font-weight:800;font-size:18px">Sin Supabase configurado: solo se ven los lobbies de otras pestañas de este navegador.</div>' : ''}
@@ -110,7 +111,7 @@ export const OnlineScreens = {
             return `
               <div class="vm-lobby-row vm-net-row">
                 <div>${esc(l.name)}<span class="host">Anfitrión: ${esc(l.host)}</span></div>
-                <div>${l.laps}</div><div>${powerupsText(l.powerups)}</div>
+                <div>${l.rounds}</div><div>${powerupsText(l.powerups)}</div>
                 <div style="${full ? 'color:var(--vm-orange)' : ''}">${l.players} / ${l.max}</div>
                 <button class="vm-btn ${full || playing ? 'dark' : 'yellow'} small center" ${full || playing ? 'disabled' : ''} data-join="${l.code}">${label}</button>
               </div>`;
@@ -156,7 +157,7 @@ export const OnlineScreens = {
 
   showCreateLobby() {
     const name = this.settings.profile.name;
-    const o = (this.lobbyOptions ??= { name: `Lobby de ${name}`, isPublic: true, laps: GAME_CONFIG.race.laps, powerups: 'normal' });
+    const o = (this.lobbyOptions ??= { name: `Lobby de ${name}`, isPublic: true, rounds: GAME_CONFIG.race.rounds, powerups: 'normal' });
     const seg = (key, options) => Object.entries(options).map(([v, label]) => `<button class="${String(o[key]) === v ? 'on' : ''}" data-v="${v}">${label}</button>`).join('');
     this.render(`
       <div class="vm-screen">
@@ -173,8 +174,8 @@ export const OnlineScreens = {
                 <div class="vm-seg" data-key="isPublic">${seg('isPublic', { true: 'Público', false: 'Privado' })}</div>
               </div>
               <div style="display:flex;flex-direction:column;gap:14px">
-                <div class="vm-label">VUELTAS</div>
-                <div class="vm-seg" style="grid-template-columns:repeat(${LAP_OPTIONS.length},1fr)" data-key="laps">${seg('laps', Object.fromEntries(LAP_OPTIONS.map((n) => [n, n])))}</div>
+                <div class="vm-label">RONDAS</div>
+                <div class="vm-seg" style="grid-template-columns:repeat(${ROUND_OPTIONS.length},1fr)" data-key="rounds">${seg('rounds', Object.fromEntries(ROUND_OPTIONS.map((n) => [n, n])))}</div>
               </div>
             </div>
             <div style="display:flex;flex-direction:column;gap:14px">
@@ -192,7 +193,7 @@ export const OnlineScreens = {
         nameInput.addEventListener('input', () => (o.name = nameInput.value.trim() || `Lobby de ${name}`));
         el.querySelectorAll('.vm-seg[data-key]').forEach((group) => group.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
           const key = group.dataset.key;
-          o[key] = key === 'isPublic' ? b.dataset.v === 'true' : key === 'laps' ? +b.dataset.v : b.dataset.v;
+          o[key] = key === 'isPublic' ? b.dataset.v === 'true' : key === 'rounds' ? +b.dataset.v : b.dataset.v;
           group.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
         })));
         el.querySelector('[data-create]').addEventListener('click', async () => {
@@ -246,7 +247,7 @@ export const OnlineScreens = {
           <div class="vm-panel" style="padding:30px;display:flex;flex-direction:column;gap:22px">
             <div class="vm-panel-title" style="margin:0">Partida</div>
             <div style="display:flex;flex-direction:column;font-weight:800;font-size:24px">
-              ${[['Modo', 'Carrera'], ['Mapa', 'El Escritorio'], ['Vueltas', st.laps], ['Power-ups', powerupsText(st.powerups)], ['Máximo', `${st.max} jugadores`]].map(([k, v]) => `
+              ${[['Modo', 'Carrera'], ['Mapa', 'El Escritorio'], ['Rondas', st.rounds], ['Power-ups', powerupsText(st.powerups)], ['Máximo', `${st.max} jugadores`]].map(([k, v]) => `
                 <div style="display:flex;justify-content:space-between;padding:14px 0;border-bottom:2px solid var(--vm-line)">
                   <span class="vm-muted">${k}</span><span>${v}</span>
                 </div>`).join('')}
@@ -329,7 +330,9 @@ export const OnlineScreens = {
     const start = DRIVERS.findIndex((d) => d.id === this.settings.drivers[0]);
     const st = { i: Math.max(0, start) };
     const controls = this.settings.controls;
-    const keys = `<kbd>${keyLabel(controls[0].left)}</kbd><kbd>${keyLabel(controls[0].right)}</kbd> o <kbd>←</kbd><kbd>→</kbd> elegir <kbd>${keyLabel(controls[0].use)}</kbd> o <kbd>ENTER</kbd> confirmar · 🎮 cruceta y A`;
+    const keys =
+      `<span class="kbd-hint"><kbd>${keyLabel(controls[0].left)}</kbd><kbd>${keyLabel(controls[0].right)}</kbd> o <kbd>←</kbd><kbd>→</kbd> elegir <kbd>${keyLabel(controls[0].use)}</kbd> o <kbd>ENTER</kbd> confirmar</span>` +
+      `<span class="pad-hint">✚ elegir ${padGlyph('A', { always: true })} confirmar ${padGlyph('B', { always: true })} cambiar</span>`;
 
     this.render(`
       <div class="vm-screen vm-pk">
@@ -438,8 +441,8 @@ export const OnlineScreens = {
           <div class="title">Partida online</div>
           <div class="text">La carrera sigue mientras tanto: no se puede pausar.</div>
           <div class="actions">
-            <button class="vm-btn yellow center" data-resume>SEGUIR</button>
-            <button class="vm-btn red stroked center" data-leave>${s?.isHost ? 'CERRAR LOBBY' : 'SALIR'}</button>
+            <button class="vm-btn yellow center" data-resume data-pad="Start" data-default>SEGUIR</button>
+            <button class="vm-btn red stroked center" data-leave data-pad="X">${s?.isHost ? 'CERRAR LOBBY' : 'SALIR'}</button>
           </div>
         </div>
       </div>`, { onCancel: resume });

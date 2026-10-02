@@ -566,8 +566,8 @@
 .vm-profile-edit { margin-top: 4px; font-weight: 900; font-size: 16px; letter-spacing: 1px; color: var(--vm-yellow); background: none; border: 0; padding: 0; cursor: pointer; }
 .vm-profile-edit:hover { text-decoration: underline; }
 
-/* Navegación con joystick: el control enfocado se marca siempre (aunque no venga del teclado) */
-.vm-padnav .vm-btn:focus, .vm-padnav .vm-keycap:focus, .vm-padnav .vm-seg button:focus, .vm-padnav .vm-card:focus, .vm-padnav .vm-map:focus, .vm-padnav .vm-toggle:focus, .vm-padnav .vm-input:focus {
+/* Modo mando (ver src/ui/padHints.js): el control enfocado se marca siempre y lleva el ícono de A */
+.pad-mode .vm-btn:focus, .pad-mode .vm-keycap:focus, .pad-mode .vm-seg button:focus, .pad-mode .vm-card:focus, .pad-mode .vm-map:focus, .pad-mode .vm-toggle:focus, .pad-mode .vm-input:focus {
   outline: 4px solid var(--vm-yellow); outline-offset: 4px;
 }
 .vm-seg button:disabled { opacity: .3; cursor: not-allowed; }
@@ -576,3 +576,41 @@
 .vm-pk-noportrait { font-family: 'Lilita One', sans-serif; font-size: 150px; line-height: 1; text-align: center; color: var(--pk-cream); -webkit-text-stroke: 8px var(--pk-ink); paint-order: stroke fill; margin-top: 40px; }
 .vm-pk-car.render { width: 72%; bottom: 8px; right: 0; }
 .vm-pk-name.long { font-size: 32px; overflow-wrap: anywhere; }
+
+/* El botón enfocado muestra la A (si no tiene otro atajo propio) */
+.pad-mode .vm-root .vm-btn:focus:not([data-pad]):not([data-back]):not([data-cancel])::after {
+  content: 'A';
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.5em;
+  height: 1.5em;
+  margin-left: 0.4em;
+  border-radius: 999px;
+  border: 0.14em solid #111318;
+  font: 900 0.7em/1 'Nunito', system-ui, sans-serif;
+  color: #fff;
+  background: #3fbf5a;
+  box-shadow: 0 0.12em 0 #111318;
+  flex: none;
+}
+/* Barra de ayuda del mando, abajo al centro */
+.vm-padbar {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  align-items: center;
+  gap: 10px;
+  padding: 10px 22px;
+  border-radius: 999px;
+  background: rgba(17, 19, 24, 0.82);
+  border: 3px solid #000;
+  font-family: 'Lilita One', sans-serif;
+  font-size: 24px;
+  color: #fff4dc;
+  z-index: 20;
+  pointer-events: none;
+}
+.vm-padbar .pad-glyph { margin-left: 8px; font-size: 22px; }
+.vm-padbar-move { margin-left: 12px; font-size: 26px; color: #ffc23a; }
+.vm-root.hidden .vm-padbar { display: none !important; }

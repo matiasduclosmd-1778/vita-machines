@@ -220,6 +220,7 @@ class MissileProjectile {
     const { ctx } = this;
     ctx.explosion({ x: this.pos.x, y: this.pos.y - CFG.hover, z: this.pos.z }, 1.2);
     if (!ctx.tryAffect(target, { strong: true })) return;
+    ctx.damage(target, CFG.damage);
 
     // Empujón en la dirección del misil, con algo del centro de la explosión hacia el auto
     const dir = new THREE.Vector3(target.position.x - this.pos.x, 0, target.position.z - this.pos.z).normalize();

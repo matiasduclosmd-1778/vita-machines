@@ -32,6 +32,7 @@ export class PowerUpManager {
     this.onPickup = null; // (car, type) → void, opcional (HUD)
     this.onUse = null; // (car, type) → void, opcional (sonido)
     this.onSound = null; // (nombre, posición, { local, strength }) → void (ver Game.sfx)
+    this.onKnockout = null; // (car) → void: se quedó sin vida (Game lo elimina)
     this.enabled = true;
     this.boxes = [];
     this.setAmount('normal');
@@ -74,14 +75,36 @@ export class PowerUpManager {
     for (const box of this.boxes) box.group.visible = this.enabled && box.active;
   }
 
-  /** Usa el objeto del jugador, si tiene. */
+  /** Usa el objeto del jugador, si tiene. Un arma no se gasta: dispara una vez (ver fire). */
   use(car) {
     if (!car.alive) return false;
+    if (this.inventory(car).item?.fire) return this.fire(car);
     const type = this.inventory(car).take();
     if (!type) return false;
     type.use(this, car);
     this.onUse?.(car, type);
     return true;
+  }
+
+  /** Un disparo del arma (si ya pasó el tiempo entre balas). Sin balas, el arma se va. */
+  fire(car) {
+    const inv = this.inventory(car);
+    const type = inv.item;
+    if (!type?.fire || !car.alive || (car.gunCooldown ?? 0) > 0 || inv.ammo <= 0) return false;
+    type.fire(this, car);
+    this.onUse?.(car, type);
+    car.gunCooldown = 1 / type.config.fireRate;
+    if (--inv.ammo <= 0) {
+      inv.clear();
+      type.onEmpty?.(this, car);
+    }
+    return true;
+  }
+
+  /** Gatillo mantenido (cada paso de física): dispara en automático mientras haya balas. */
+  trigger(car, held, dt) {
+    car.gunCooldown = Math.max(0, (car.gunCooldown ?? 0) - dt);
+    if (held && this.inventory(car).item?.fire) this.fire(car);
   }
 
   /** Power-up aleatorio según `weight` de cada uno en POWERUP_CONFIG. */
@@ -162,6 +185,15 @@ export class PowerUpManager {
     this.effects.add(target, StunnedEffect, air + cfg.stunDuration * t);
   }
 
+  /** Daño de un objeto: le saca vida; si llega a 0, queda eliminado. */
+  damage(target, amount) {
+    if (!amount || !target.alive || target.health <= 0) return;
+    target.health = Math.max(0, target.health - amount);
+    target.hurt = 1;
+    if (amount >= 10) this.sound('hurt', target.position, { strength: amount }); // las balas tienen su propio sonido
+    if (target.health <= 0) this.onKnockout?.(target);
+  }
+
   /** Sonido con posición (lo reproduce Game; online, el anfitrión se lo manda a los invitados). */
   sound(name, pos, opts) {
     this.onSound?.(name, pos, opts);
@@ -193,6 +225,7 @@ export class PowerUpManager {
         const type = this.randomType();
         box.collect();
         inv.give(type);
+        type.onPickup?.(this, car);
         this.particles.burst({ x: box.x, y: box.y + 1.3, z: box.z }, 18, { color: type.color, speed: 7, up: 5, size: 0.3 });
         this.onPickup?.(car, type);
         break;
