@@ -29,6 +29,7 @@ export function resolveCarTrack(car, track) {
     }
   }
   if (impact > 1) car.onImpact(impact);
+  if (impact > 3) car.sound('wall', impact);
 }
 
 /** Obstáculos estáticos circulares { x, z, r }. */
@@ -53,9 +54,13 @@ export function resolveCarObstacles(car, obstacles) {
     }
   }
   if (impact > 1) car.onImpact(impact);
+  if (impact > 3) car.sound('wall', impact);
 }
 
-/** Choque entre dos autos de igual masa: separa, rebota y agrega un poco de giro. */
+/**
+ * Choque entre dos vehículos: separa, rebota según sus masas (la moto, más liviana, sale más
+ * despedida) y agrega un poco de giro. Un vehículo frágil chocado fuerte sale en trompo.
+ */
 export function resolveCarCar(a, b) {
   if (a.fall || b.fall || Math.abs(a.position.y - b.position.y) > 1.6) return;
   let impact = 0;
@@ -77,13 +82,17 @@ export function resolveCarCar(a, b) {
 
       const vRel = (b.velocity.x - a.velocity.x) * nx + (b.velocity.z - a.velocity.z) * nz;
       if (vRel < 0) {
-        const j = (-(1 + C.carBounce) * vRel) / 2;
-        a.velocity.x -= j * nx;
-        a.velocity.z -= j * nz;
-        b.velocity.x += j * nx;
-        b.velocity.z += j * nz;
-        addSpin(a, ca, nx, nz, j, -nx, -nz);
-        addSpin(b, cb, -nx, -nz, j, nx, nz);
+        const ma = a.mass ?? 1;
+        const mb = b.mass ?? 1;
+        const j = (-(1 + C.carBounce) * vRel) / (1 / ma + 1 / mb);
+        const ja = j / ma; // cambio de velocidad de cada uno: el más liviano se lleva más
+        const jb = j / mb;
+        a.velocity.x -= ja * nx;
+        a.velocity.z -= ja * nz;
+        b.velocity.x += jb * nx;
+        b.velocity.z += jb * nz;
+        addSpin(a, ca, nx, nz, ja, -nx, -nz);
+        addSpin(b, cb, -nx, -nz, jb, nx, nz);
         impact = Math.max(impact, -vRel);
       }
       a.updateCircles();
@@ -93,6 +102,10 @@ export function resolveCarCar(a, b) {
   if (impact > 1) {
     a.onImpact(impact);
     b.onImpact(impact);
+    if (impact > 2) a.sound('crash', impact);
+    // El trompo gira hacia donde lo empujó el golpe (o hacia un lado cualquiera si fue de lleno)
+    a.knockSpin(impact, Math.sign(a.spin) || (Math.random() < 0.5 ? -1 : 1));
+    b.knockSpin(impact, Math.sign(b.spin) || (Math.random() < 0.5 ? -1 : 1));
   }
 }
 
@@ -119,5 +132,6 @@ function bounce(car, nx, nz, restitution, friction) {
 function addSpin(car, circle, cx, cz, j, fx, fz) {
   const rx = circle.x + cx * circle.r - car.position.x;
   const rz = circle.z + cz * circle.r - car.position.z;
-  car.spin = Math.max(-4, Math.min(4, car.spin + C.spin * j * (rz * fx - rx * fz)));
+  const max = Math.max(4, Math.abs(car.spin)); // no recorta el giro de un trompo que ya viene girando
+  car.spin = Math.max(-max, Math.min(max, car.spin + C.spin * j * (rz * fx - rx * fz)));
 }

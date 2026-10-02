@@ -68,6 +68,7 @@ export class Terrain {
         car.vy = 0;
         car.grounded = true;
         if (car.airTime > 0.15) car.onImpact(impact * 0.8);
+        if (car.airTime > 0.25 && impact > 3) car.sound('land', impact);
         car.airTime = 0;
       }
     }
@@ -78,6 +79,7 @@ export class Terrain {
       car.fall = { timer: T.respawnDelay };
       car.grounded = false;
       car.falls++;
+      car.sound('fall');
       return;
     }
 
@@ -92,6 +94,7 @@ export class Terrain {
     const others = cars.filter((c) => c !== car);
     const p = this.track.respawnPoint(car, others);
     car.respawnAt(p.x, p.y, p.z, p.heading, T.respawnBlink);
+    car.sound('respawn');
     car.ground = this.track.groundAt(p.x, p.z, p.y);
     this.track.updateProgress(car);
   }

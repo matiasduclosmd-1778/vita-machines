@@ -1,5 +1,7 @@
 import { GAME_CONFIG, POWERUP_CONFIG } from '../config.js';
-import { saveSettings, keyLabel } from './Settings.js';
+import { keyLabel } from './Settings.js';
+import { parsePad } from '../Input.js';
+import { audio } from '../audio/index.js';
 import { esc, pilotCardsHTML } from './Menu.js';
 import { transportKind } from '../net/transport.js';
 
@@ -46,7 +48,7 @@ export const OnlineScreens = {
             return;
           }
           this.settings.profile.name = name;
-          saveSettings(this.settings);
+          this.commitSettings(); // también es el nombre del jugador 1 en local
           this.showHome();
         };
         el.querySelector('[data-ok]').addEventListener('click', save);
@@ -327,7 +329,7 @@ export const OnlineScreens = {
     const start = DRIVERS.findIndex((d) => d.id === this.settings.drivers[0]);
     const st = { i: Math.max(0, start) };
     const controls = this.settings.controls;
-    const keys = `<kbd>${keyLabel(controls[0].left)}</kbd><kbd>${keyLabel(controls[0].right)}</kbd> o <kbd>←</kbd><kbd>→</kbd> elegir <kbd>${keyLabel(controls[0].use)}</kbd> o <kbd>ENTER</kbd> confirmar`;
+    const keys = `<kbd>${keyLabel(controls[0].left)}</kbd><kbd>${keyLabel(controls[0].right)}</kbd> o <kbd>←</kbd><kbd>→</kbd> elegir <kbd>${keyLabel(controls[0].use)}</kbd> o <kbd>ENTER</kbd> confirmar · 🎮 cruceta y A`;
 
     this.render(`
       <div class="vm-screen vm-pk">
@@ -347,6 +349,7 @@ export const OnlineScreens = {
           </div>
         </div>
       </div>`, {
+      music: 1,
       back: () => online.leave(), // botón SALIR (ESC solo deshace la confirmación, ver screenKey)
       onMount: (el) => {
         el.querySelectorAll('.vm-pk-card').forEach((c) => c.addEventListener('click', () => {
@@ -364,6 +367,8 @@ export const OnlineScreens = {
     const cards = [...el.querySelectorAll('.vm-pk-card')];
     const confirm = () => {
       if (!s.player) return;
+      audio.play(s.player.confirmed ? 'ui-back' : 'ui-confirm');
+      if (!s.player.confirmed) audio.voices.say(DRIVERS[st.i].id);
       s.setPilot(DRIVERS[st.i].id, !s.player.confirmed);
     };
     const update = () => {
@@ -386,19 +391,23 @@ export const OnlineScreens = {
     };
     this.onlineUpdate = update;
     this.screenKey = (code) => {
+      // Joystick: cruceta/stick elige, A o X confirma, B desconfirma
+      const pad = parsePad(code)?.button;
+      if (pad) code = { Left: 'ArrowLeft', Right: 'ArrowRight', A: 'Enter', X: 'Enter', B: 'Backspace' }[pad] ?? '';
       if (code === 'Escape' || code === 'Backspace') {
         if (s.player?.confirmed) s.setPilot(DRIVERS[st.i].id, false);
         return true;
       }
-      const left = code === controls[0].left || code === controls[1].left;
-      const right = code === controls[0].right || code === controls[1].right;
+      const left = code === 'ArrowLeft' || controls.some((c) => c.left === code);
+      const right = code === 'ArrowRight' || controls.some((c) => c.right === code);
       if (left || right) {
         if (s.player?.confirmed) return true;
         st.i = (st.i + (right ? 1 : -1) + n) % n;
         s.setPilot(DRIVERS[st.i].id, false);
+        audio.play('ui-move');
         return true;
       }
-      if (code === controls[0].use || code === controls[1].use || code === 'Enter' || code === 'NumpadEnter') {
+      if (controls.some((c) => c.use === code) || code === 'Enter' || code === 'NumpadEnter') {
         confirm();
         return true;
       }

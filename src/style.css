@@ -24,39 +24,52 @@ kbd {
   color: #9aa0ad;
 }
 
-/* --- Tarjetas de jugador ------------------------------------------------ */
+/* --- Tarjetas de jugador: filas finitas abajo a la izquierda (no tapan la pista) --- */
 .top {
   position: absolute;
-  top: 16px;
-  left: 16px;
-  right: 16px;
+  left: 14px;
+  bottom: 14px;
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 6px;
 }
 
+/*  [objeto] Nombre        2º · 1/5
+    [      ] efectos o aviso (solo si hay) */
 .card {
-  min-width: 200px;
-  padding: 12px 16px 10px;
-  border-radius: 20px;
-  background: rgba(26, 28, 35, 0.94);
-  border: 4px solid #111318;
-  box-shadow: 0 6px 0 #111318, inset 0 -6px 0 var(--c);
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  grid-template-areas: 'item name info' 'item sub sub';
+  align-items: center;
+  column-gap: 9px;
+  width: 236px;
+  padding: 5px 10px 5px 6px;
+  border-radius: 11px;
+  background: rgba(17, 19, 24, 0.62);
+  border-left: 4px solid var(--c);
+  backdrop-filter: blur(4px);
   transition: transform 0.15s, opacity 0.3s;
 }
-.card[data-i='1'] { text-align: right; }
 .card-name {
+  grid-area: name;
   font-family: 'Lilita One', sans-serif;
-  font-size: 26px;
-  line-height: 1;
+  font-size: 17px;
+  line-height: 1.1;
   color: var(--c);
-  -webkit-text-stroke: 4px #111318;
-  paint-order: stroke;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.card-keys { font-size: 12px; font-weight: 800; color: #9aa0ad; letter-spacing: 1px; margin-top: 2px; }
-.card-info { font-size: 15px; font-weight: 900; margin-top: 4px; }
-.card-status { font-family: 'Lilita One', sans-serif; font-size: 16px; min-height: 1em; margin-top: 2px; color: #e9574a; letter-spacing: 0.5px; }
-.card[data-state='OUT_OF_SCREEN'] { animation: shake 0.3s infinite; box-shadow: 0 6px 0 #111318, inset 0 -6px 0 #e9574a; }
-.card[data-state='ELIMINATED'] { opacity: 0.55; }
+.card-keys { display: none; }
+.card-info { grid-area: info; font-size: 12px; font-weight: 900; color: #cfd3db; font-variant-numeric: tabular-nums; }
+.card-info .place { color: #fff4dc; font-size: 14px; }
+.card-status, .effects { grid-area: sub; font-size: 11px; font-weight: 900; letter-spacing: 0.4px; line-height: 1.2; }
+.card-status { font-family: 'Lilita One', sans-serif; font-weight: 400; color: #ff6a5c; }
+.effects { color: #9aa0ad; }
+.card-status:empty, .effects:empty { display: none; }
+.effects:has(~ .card-status:not(:empty)) { display: none; } /* el aviso tiene prioridad */
+.card[data-state='OUT_OF_SCREEN'] { animation: shake 0.3s infinite; border-left-color: #ff3b2f; background: rgba(90, 20, 18, 0.7); }
+.card[data-state='ELIMINATED'] { opacity: 0.45; }
 
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
@@ -64,59 +77,51 @@ kbd {
   75% { transform: translateX(3px); }
 }
 
-/* --- Power-up del jugador ---------------------------------------------- */
+/* --- Power-up del jugador: un cuadradito con el ícono ------------------- */
 .item {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 8px;
-  padding: 4px 10px;
-  border-radius: 12px;
-  font-family: 'Lilita One', sans-serif;
-  font-size: 16px;
-  letter-spacing: 0.5px;
-  border: 3px dashed #3a3d47;
-  color: #5b606c;
+  grid-area: item;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  border: 2px dashed rgba(255, 255, 255, 0.14);
 }
-.item-icon { font-size: 20px; line-height: 1; }
-.item-key { display: none; }
+.item-icon { font-size: 18px; line-height: 1; }
+.item-name, .item-key { display: none; }
 .item[data-state='HAS_ITEM'] {
-  border: 3px solid #111318;
-  color: #111318;
+  border: 2px solid #111318;
   background: var(--ic);
-  box-shadow: 0 4px 0 #111318;
   animation: ready 0.9s ease-in-out infinite alternate;
 }
-.item[data-state='HAS_ITEM'] .item-key { display: inline; background: rgba(17, 19, 24, 0.85); color: #fff4dc; }
 .item.got { animation: got 0.4s ease-out; }
-@keyframes ready { to { filter: brightness(1.15); } }
+@keyframes ready { to { filter: brightness(1.2); } }
 @keyframes got {
-  from { transform: scale(1.5); }
+  from { transform: scale(1.6); }
   to { transform: scale(1); }
 }
-.effects { font-size: 12px; font-weight: 900; color: #9aa0ad; min-height: 1em; margin-top: 4px; letter-spacing: 0.5px; }
 
-/* --- Botones superiores (pausa / reiniciar) ------------------------------ */
+/* --- Pausa / reiniciar: abajo a la derecha ------------------------------ */
 .top-actions {
   position: absolute;
-  top: 16px;
-  left: 50%;
-  transform: translateX(-50%);
+  right: 14px;
+  bottom: 14px;
   display: flex;
-  gap: 10px;
+  gap: 8px;
+  opacity: 0.75;
 }
 .hud-btn {
   pointer-events: auto;
   cursor: pointer;
-  height: 40px;
-  padding: 0 14px;
-  border: 3px solid #111318;
-  border-radius: 12px;
-  box-shadow: 0 4px 0 #111318;
+  height: 32px;
+  padding: 0 11px;
+  border: 2px solid #111318;
+  border-radius: 10px;
+  box-shadow: 0 3px 0 #111318;
   background: #2a2d36;
   color: #fff4dc;
   font-family: 'Lilita One', sans-serif;
-  font-size: 17px;
+  font-size: 14px;
   transition: transform 0.08s, box-shadow 0.08s;
 }
 .hud-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 0 #111318; }
@@ -194,41 +199,7 @@ kbd {
 }
 @keyframes blink { to { opacity: 0.4; } }
 
-/* --- Resultado ----------------------------------------------------------- */
-.result {
-  position: absolute;
-  z-index: 10;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  background: rgba(10, 11, 14, 0.6);
-  backdrop-filter: blur(3px);
-  pointer-events: auto;
-}
-.result-box {
-  width: min(620px, 92vw);
-  text-align: center;
-  background: #1a1c23;
-  border: 5px solid #111318;
-  border-radius: 28px;
-  box-shadow: 0 12px 0 #111318;
-  overflow: hidden;
-  animation: vmPop 0.3s ease-out;
-}
-.result-box .band { height: 22px; background: repeating-linear-gradient(-45deg, #ffc93c 0 20px, #111318 20px 40px); border-bottom: 5px solid #111318; }
-.result-body { padding: 30px 40px 26px; }
-.result-title {
-  font-family: 'Lilita One', sans-serif;
-  font-size: 56px;
-  line-height: 1.05;
-  -webkit-text-stroke: 8px #111318;
-  paint-order: stroke;
-  text-shadow: 0 6px 0 #111318;
-}
-.result-sub { margin: 12px 0 24px; font-size: 18px; font-weight: 800; color: #9aa0ad; }
-.result-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-.result-actions .vm-btn { height: 68px; font-size: 30px; --shadow: 7px; border-radius: 18px; }
-.result-hint { margin-top: 16px; font-size: 14px; font-weight: 800; color: #9aa0ad; }
+/* --- Resultado: el podio está en src/ui/podium.css --------------------- */
 
 /* --- Debug (GAME_CONFIG.debug / tecla V) ------------------------------- */
 .debug-safe {
@@ -277,7 +248,7 @@ kbd {
 .debug-panel {
   position: absolute;
   left: 16px;
-  bottom: 16px;
+  top: 16px;
   margin: 0;
   padding: 10px 12px;
   font: 12px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -288,17 +259,7 @@ kbd {
 
 .hidden { display: none !important; }
 
-/* --- Online: hasta 6 tarjetas ------------------------------------------- */
-.top.compact { justify-content: center; flex-wrap: wrap; gap: 10px; }
-.top.compact .card { min-width: 0; width: 170px; padding: 8px 12px 8px; border-radius: 16px; text-align: left; }
-.top.compact .card-name { font-size: 20px; -webkit-text-stroke-width: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.top.compact .card-info { font-size: 13px; }
-.top.compact .item { font-size: 13px; padding: 2px 8px; margin-top: 6px; }
-.top.compact .item-icon { font-size: 16px; }
-.top.compact .effects { font-size: 11px; }
-.card.me { border-color: var(--c); box-shadow: 0 6px 0 #111318, inset 0 -6px 0 var(--c), 0 0 0 3px #111318; }
-.card.me .card-name::after { content: ' · TÚ'; font-size: 0.6em; color: var(--vm-cream, #fff4dc); }
-.result-wait { display: grid; place-items: center; font-family: 'Lilita One', sans-serif; font-size: 22px; color: #9aa0ad; }
+/* --- Online: la fila propia se marca --------------------------------------- */
+.card.me { background: rgba(17, 19, 24, 0.82); box-shadow: 0 0 0 2px var(--c); }
+.card.me .card-name::after { content: ' · TÚ'; font-size: 0.7em; color: var(--vm-cream, #fff4dc); }
 .result-actions.hidden, .result-hint.hidden { display: none; }
-/* Con muchas tarjetas arriba, Pausa pasa a la esquina de abajo */
-.top.compact ~ .top-actions { top: auto; bottom: 16px; left: auto; right: 16px; transform: none; }

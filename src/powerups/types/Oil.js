@@ -76,7 +76,10 @@ class OilSlick {
       if (car === this.owner && this.age < CFG.ownerGrace) continue;
       if (Math.hypot(car.position.x - this.x, car.position.z - this.z) > CFG.radius + 0.4) continue;
       if (Math.abs(car.position.y - this.y) > 1 || !car.grounded) continue;
-      if (this.ctx.tryAffect(car, { strong: false })) this.ctx.effects.add(car, SlippingEffect, CFG.slipperyDuration);
+      if (this.ctx.tryAffect(car, { strong: false })) {
+        if (!this.ctx.effects.get(car, 'SLIPPING')) this.ctx.sound('slip', car.position);
+        this.ctx.effects.add(car, SlippingEffect, CFG.slipperyDuration);
+      }
     }
     return this.age < CFG.lifetime;
   }

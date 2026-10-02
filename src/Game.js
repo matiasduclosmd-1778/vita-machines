@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GAME_CONFIG } from './config.js';
-import { Input } from './Input.js';
+import { input, isUse, isJump, isAnyPadUse, isAnyPadJump, parsePad } from './Input.js';
 import { Track } from './track/Track.js';
 import { Environment } from './world/Environment.js';
 import { PostFX } from './world/PostFX.js';
@@ -13,6 +13,8 @@ import { Debug } from './Debug.js';
 import { PowerUpManager } from './powerups/PowerUpManager.js';
 import { resolveCarCar, resolveCarObstacles, resolveCarTrack } from './Collision.js';
 import { AIDriver } from './ai/AIDriver.js';
+import { localPlayerName } from './ui/Settings.js';
+import { audio } from './audio/index.js';
 
 const { physicsStep: STEP, players: PLAYERS, camera: CAM, outOfScreen: OUT } = GAME_CONFIG;
 
@@ -38,7 +40,7 @@ export class Game {
     this.environment.buildEnvMap(this.renderer);
     this.terrain = new Terrain(this.track);
     this.rig = new CameraRig(window.innerWidth / window.innerHeight);
-    this.input = new Input();
+    this.input = input;
     this.laps = GAME_CONFIG.race.laps;
     this.net = null; // online: HostSync (anfitrión) o GuestSync (invitado), ver src/net/NetRace.js
     this.cars = [];
@@ -46,30 +48,38 @@ export class Game {
     this.powerups.onPickup = (car) => {
       const i = this.cars.indexOf(car);
       this.hud.flashItem(i);
-      this.net?.event(['p', i]);
+      this.net?.event(['p', i]); // el invitado lo muestra y lo hace sonar
+      this.sfx('pickup', { car, local: true });
     };
-    this.setupPlayers(PLAYERS);
+    this.powerups.onUse = (car, type) => this.sfx(`use-${type.id}`, { car });
+    this.powerups.onSound = (name, pos, opts = {}) => this.sfx(name, { pos, ...opts });
+    this.setupPlayers(this.localPlayers(2));
     this.postfx = new PostFX(this.renderer, this.scene, this.rig.camera);
 
     this.input.onPress((code) => {
       if (!this.running) return; // en menús y en pausa las teclas son del menú
-      if (code === 'Escape') {
+      const pad = parsePad(code)?.button;
+      if (code === 'Escape' || pad === 'Start') {
         // Online la carrera no se pausa: el menú se abre encima mientras sigue
         if (this.net) return this.callbacks.onOnlineMenu?.();
         this.pause();
         return this.callbacks.onPause?.();
       }
-      if (!this.net && (code === 'KeyR' || (code === 'Enter' && this.state === 'finished'))) return this.restart();
+      const confirm = code === 'Enter' || pad === 'A';
+      if (!this.net && (code === 'KeyR' || (confirm && this.state === 'finished'))) return this.restart();
       if (code === 'KeyV') this.debug.toggle();
       if (code === 'KeyG') console.info('[gráficos] calidad:', this.postfx.toggleQuality());
       if (this.state !== 'racing') return;
       if (this.net) {
-        // Online: cualquiera de los dos juegos de teclas maneja el auto propio
-        if (this.localControls.some((c) => c.use === code)) this.net.useItem();
+        // Online: cualquier juego de teclas o joystick maneja el auto propio
+        if (this.localControls.some((c) => c.use === code) || isAnyPadUse(code)) this.net.useItem();
+        if (this.localControls.some((c) => c.jump === code) || isAnyPadJump(code)) this.net.jump();
         return;
       }
       this.cars.forEach((car, i) => {
-        if (!this.drivers?.[i] && code === car.player.controls.use) this.powerups.use(car);
+        if (this.drivers?.[i]) return;
+        if (isUse(code, car.player)) this.powerups.use(car);
+        if (isJump(code, car.player)) car.jump();
       });
     });
     window.addEventListener('resize', () => this.onResize());
@@ -84,8 +94,8 @@ export class Game {
 
   /**
    * Arma los autos, el HUD y el seguimiento de pantalla para una lista de jugadores
-   * ({ name, short, color, paint, controls?, controlsLabel, useLabel }). Local son los 2 de config.js;
-   * online, hasta 6. Si la lista es la misma no rehace nada.
+   * ({ name, short, color, paint, controls?, pad?, controlsLabel, useLabel }). Local son los primeros
+   * 2 a 4 de config.js; online, hasta 6. Si la lista es la misma no rehace nada.
    */
   setupPlayers(players) {
     if (this.players === players) return;
@@ -109,16 +119,26 @@ export class Game {
     this.restart();
   }
 
-  /** Teclas del jugador propio en el online: sirven las del jugador 1 y las del jugador 2. */
+  /** Los primeros n jugadores de config.js (siempre la misma lista para el mismo n). */
+  localPlayers(n) {
+    this.localLists ??= {};
+    return (this.localLists[n] ??= PLAYERS.slice(0, n));
+  }
+
+  /** Teclas del jugador propio en el online: sirven las de todos los jugadores locales. */
   get localControls() {
     return PLAYERS.map((p) => p.controls);
   }
 
-  /** Controles del jugador propio en el online (suma de los dos juegos de teclas). */
+  /** Controles del jugador propio en el online (suma de todos los juegos de teclas y joysticks). */
   localAxis() {
-    const a = this.localControls.map((c) => this.input.axis(c));
+    const a = [
+      ...this.localControls.map((c) => this.input.axis(c)),
+      ...this.input.pads.map((_, n) => this.input.padAxis(n)),
+    ];
     const clamp1 = (v) => Math.max(-1, Math.min(1, v));
-    return { throttle: clamp1(a[0].throttle + a[1].throttle), steer: clamp1(a[0].steer + a[1].steer) };
+    const sum = (k) => clamp1(a.reduce((t, x) => t + x[k], 0));
+    return { throttle: sum('throttle'), steer: sum('steer') };
   }
 
   /**
@@ -136,30 +156,30 @@ export class Game {
     this.resume();
   }
 
-  /** Sale del online: vuelve a los 2 jugadores locales. */
+  /** Sale del online: vuelve a los jugadores locales. */
   endOnline() {
     this.net?.dispose();
     this.net = null;
     this.hud.setResultMode('local');
-    this.setupPlayers(PLAYERS);
+    this.setupPlayers(this.localPlayers(2));
   }
 
   // ---------------------------------------------------------------- ciclo de vida (menú)
 
   /**
    * Arranca una carrera nueva con las opciones elegidas en "Crear partida".
-   * opponent: 'cpu' (el jugador 2 lo maneja la computadora) | 'local' (dos personas)
-   * drivers: id del piloto de cada jugador (GAME_CONFIG.drivers)
+   * humans: personas (jugadores 1…humans) · cpus: pilotos de la computadora (los autos que siguen)
+   * drivers: id del piloto de cada auto (GAME_CONFIG.drivers)
    * laps: vueltas para ganar · powerups: 'off' | 'few' | 'normal' | 'many'
    */
-  startRace({ powerups = 'normal', opponent = 'local', difficulty = 'normal', drivers = [], laps = GAME_CONFIG.race.laps } = {}) {
+  startRace({ powerups = 'normal', humans = 1, cpus = 1, difficulty = 'normal', drivers = [], laps = GAME_CONFIG.race.laps } = {}) {
     if (this.net) this.endOnline();
-    this.setupPlayers(PLAYERS);
+    this.setupPlayers(this.localPlayers(humans + cpus));
     this.laps = laps;
     this.hud.setLaps(laps);
     this.powerups.setAmount(powerups);
     this.setDrivers(drivers);
-    this.setOpponent(opponent, difficulty);
+    this.setCpus(humans, difficulty);
     this.restart();
     this.resume();
   }
@@ -167,12 +187,13 @@ export class Game {
   /** Modelos 3D cargados ({ id → modelo }); cada auto arranca con el piloto de su jugador en config.js. */
   setCarModels(models) {
     this.carModels = models;
-    this.setDrivers(PLAYERS.map((p) => p.driver));
+    this.setDrivers(this.players.map((p) => p.driver));
   }
 
   /**
    * Pone en cada auto al piloto elegido: sus stats y su auto con su pintura.
-   * Si los dos eligen el mismo piloto, el jugador 2 usa la pintura de su color para distinguirse.
+   * Si un piloto está repetido, todos los autos de ese piloto usan la pintura de su jugador
+   * (el mismo color que su etiqueta y su tarjeta del HUD) para distinguirse.
    */
   setDrivers(ids) {
     this.cars.forEach((car, i) => {
@@ -180,38 +201,46 @@ export class Game {
       if (!driver) return;
       car.setDriver(driver);
       const model = this.carModels?.[driver.car];
-      const repeated = ids.slice(0, i).includes(ids[i]);
-      if (model) car.applyModel(model, repeated ? car.player.paint : driver.paint);
+      const repeated = ids.filter((id) => id === ids[i]).length > 1;
+      if (model) car.applyModel(model, repeated ? car.player.paint : driver.paint, repeated);
     });
   }
 
-  /** Define quién maneja cada auto (carrera local): teclado o piloto de la computadora. */
-  setOpponent(opponent, difficulty) {
-    const p2 = PLAYERS[1];
-    p2.humanName ??= p2.name;
-    p2.humanShort ??= p2.short;
-    this.drivers = this.cars.map(() => null);
-    if (opponent === 'cpu') {
-      this.drivers[1] = new AIDriver(this.cars[1], this, difficulty);
-      p2.name = GAME_CONFIG.ai.cpuName;
-      p2.short = 'CPU';
-      p2.cpuLabel = 'Computadora · ' + GAME_CONFIG.ai.difficulties[difficulty].label;
-    } else {
-      p2.name = p2.humanName;
-      p2.short = p2.humanShort;
-      p2.cpuLabel = null;
+  /** Quién maneja cada auto (carrera local): los primeros `humans` son personas, el resto la computadora. */
+  setCpus(humans, difficulty) {
+    const cpus = this.cars.length - humans;
+    const label = 'Computadora · ' + GAME_CONFIG.ai.difficulties[difficulty].label;
+    this.drivers = this.cars.map((car, i) => (i >= humans ? new AIDriver(car, this, difficulty) : null));
+    this.players.forEach((p, i) => {
+      const k = i - humans + 1;
+      p.cpuLabel = i >= humans ? label : null;
+      p.cpuName = cpus > 1 ? `${GAME_CONFIG.ai.cpuName} ${k}` : GAME_CONFIG.ai.cpuName;
+      p.cpuShort = cpus > 1 ? `CP${k}` : 'CPU';
+    });
+    this.refreshNames();
+  }
+
+  /** Pone los nombres (de la persona o de la CPU) en el HUD y en la etiqueta de cada auto. */
+  refreshNames() {
+    for (const p of this.players) {
+      p.name = p.cpuLabel ? p.cpuName : p.humanName ?? p.name;
+      p.short = p.cpuLabel ? p.cpuShort : p.humanShort ?? p.short;
     }
-    this.hud.setNames(PLAYERS);
+    this.hud.setNames(this.players);
+    for (const car of this.cars) car.setLabel(car.player.name);
   }
 
   pause() {
     this.running = false;
     this.renderer.setAnimationLoop(null);
     this.input.down.clear();
+    audio.setPaused(true);
   }
 
   resume() {
     this.running = true;
+    audio.setPaused(false);
+    if (this.state === 'racing') audio.music.play('race', this.finalLap ? 1 : 0);
     this.lastTime = 0; // evita un salto de tiempo después de la pausa
     this.accumulator = 0;
     this.setHudVisible(true);
@@ -222,6 +251,8 @@ export class Game {
   stop() {
     this.pause();
     this.setHudVisible(false);
+    audio.engines.stopAll();
+    audio.setPaused(false);
   }
 
   setHudVisible(on) {
@@ -252,7 +283,13 @@ export class Game {
     this.debug.apply();
 
     settings.controls.forEach((c, i) => Object.assign(PLAYERS[i].controls, c));
-    this.hud.refreshControls(PLAYERS);
+    PLAYERS.forEach((p, i) => {
+      p.pad = settings.pads[i] ?? null;
+      const { name, short } = localPlayerName(settings, i);
+      p.humanName = name;
+      p.humanShort = short;
+    });
+    if (!this.net) this.refreshNames();
   }
 
   /** Compila los shaders por adelantado para que la carrera no tartamudee al empezar. */
@@ -302,6 +339,7 @@ export class Game {
     this.cars.forEach((car, i) => {
       const p = this.track.startPosition(i);
       car.reset(p.x, p.z, p.heading, p.y);
+      car.eliminatedAt = null;
       this.track.resetProgress(car);
     });
     this.tracker.reset();
@@ -311,6 +349,9 @@ export class Game {
     this.result = null;
     this.state = 'racing';
     this.raceTime = 0;
+    this.lapsSeen = this.cars.map(() => 1);
+    this.finalLap = false;
+    this.startCue = true; // la largada suena en el primer cuadro (ver frame)
     const leader = this.leader();
     this.rig.update(0, this.cars, leader, this.cameraYaw(this.cars, leader), true);
   }
@@ -332,6 +373,7 @@ export class Game {
     }
 
     for (const car of this.cars) car.syncMesh(dt);
+    this.updateAudio(dt);
     this.powerups.update(dt);
 
     // La cámara encuadra a los autos vivos que no se están cayendo
@@ -366,12 +408,13 @@ export class Game {
     this.finish({ winner, byLaps: true });
   }
 
-  /** Controles de cada auto: piloto de la CPU, jugador remoto (online) o teclado. */
+  /** Controles de cada auto: piloto de la CPU, jugador remoto (online) o teclado/joystick. */
   inputFor(i) {
     const driver = this.drivers?.[i];
     if (driver) return driver.update(STEP);
     if (this.net) return this.net.inputFor(i);
-    return this.input.axis(this.cars[i].player.controls);
+    const p = this.cars[i].player;
+    return this.input.axis(p.controls, p.pad);
   }
 
   fixedUpdate(dt) {
@@ -410,14 +453,18 @@ export class Game {
   /** Autos que quedaron fuera de pantalla (o se desconectaron). Si queda uno solo (o ninguno), termina. */
   eliminate(indices) {
     if (this.state !== 'racing') return;
-    indices.forEach((i) => this.cars[i].eliminate());
+    indices.forEach((i) => {
+      this.cars[i].eliminate();
+      this.sfx('eliminated', { car: this.cars[i] });
+      this.cars[i].eliminatedAt = this.raceTime; // para ordenar el podio
+    });
     const alive = this.cars.filter((c) => c.alive);
     if (alive.length <= 1) this.finish({ winner: alive[0] ?? null, eliminated: indices });
   }
 
   /**
    * Fin de la carrera: { winner, eliminated: [índices] } (el último en pie)
-   * o { winner, byLaps: true } (completó las vueltas).
+   * o { winner, byLaps: true } (completó las vueltas). Arma el resultado para el podio.
    */
   finish({ winner = null, eliminated = [], byLaps = false }) {
     this.state = 'finished';
@@ -428,21 +475,101 @@ export class Game {
       this.tracker.timers[i] = 0;
       this.tracker.inside[i] = true;
     });
-    const many = this.cars.length > 2;
-    const last = this.cars[eliminated[0]]?.player;
-    this.result = winner
-      ? {
-          winner: this.cars.indexOf(winner),
-          title: `¡${winner.player.name} gana!`,
-          color: winner.player.color,
-          sub: byLaps
-            ? many
-              ? `Completó las ${this.laps} vueltas primero.`
-              : `Completó las ${this.laps} vueltas antes que ${this.cars.find((c) => c !== winner).player.name}.`
-            : `${last?.name ?? 'El rival'} quedó fuera de pantalla y fue eliminado.`,
-        }
-      : { winner: -1, title: '¡Empate!', color: '', sub: 'Quedaron todos eliminados a la vez.' };
+    const p = winner?.player;
+    this.result = {
+      winner: winner ? this.cars.indexOf(winner) : -1,
+      title: winner ? `¡${p.name} gana!` : '¡Empate!',
+      color: p?.color ?? '',
+      sub: !winner
+        ? 'Quedaron todos eliminados a la vez.'
+        : byLaps
+          ? `Completó las ${this.laps} vueltas primero.`
+          : 'Fue el último en quedar en pantalla.',
+      standings: this.standings(winner),
+    };
     this.hud.showResult(this.result);
+  }
+
+  /**
+   * Clasificación final, del 1º al último: primero los que siguen en carrera (por lo que avanzaron),
+   * después los eliminados (el último en caer, más arriba). Solo datos simples: el online la manda tal cual.
+   *  time: tiempo del ganador (ms) · gap: diferencia estimada en segundos (según la velocidad media del ganador)
+   *  out: eliminado (y en qué vuelta)
+   */
+  standings(winner) {
+    const alive = this.cars.filter((c) => c.alive).sort((a, b) => b.progress - a.progress);
+    const out = this.cars.filter((c) => !c.alive).sort((a, b) => (b.eliminatedAt ?? 0) - (a.eliminatedAt ?? 0));
+    if (winner && alive[0] !== winner) alive.splice(alive.indexOf(winner), 1), alive.unshift(winner);
+    const lead = alive[0];
+    const pace = lead && this.raceTime > 0 ? lead.progress / this.raceTime : 0; // u/s del que va primero
+    return [...alive, ...out].map((car) => {
+      const p = car.player;
+      return {
+        index: this.cars.indexOf(car),
+        name: p.name,
+        color: p.color,
+        cpu: !!p.cpuLabel,
+        driver: car.driver?.id ?? null,
+        time: car === lead ? Math.round(this.raceTime * 1000) : null,
+        gap: car.alive && car !== lead && pace > 0 ? (lead.progress - car.progress) / pace : null,
+        out: !car.alive,
+        lap: Math.min(this.laps, this.track.lap(car)),
+      };
+    });
+  }
+
+  // ---------------------------------------------------------------- sonido
+
+  /**
+   * Efecto de sonido de la carrera, paneado según dónde está en pantalla (car o pos).
+   * Online, el anfitrión se lo manda a los invitados (salvo `local`: lo que ellos ya recrean solos).
+   */
+  sfx(name, { car = null, pos = car?.position, gain = 1, strength, local = false } = {}) {
+    const x = pos ? this.rig.toNDC({ x: pos.x, y: pos.y ?? 0, z: pos.z }).x : 0;
+    const pan = Number.isFinite(x) ? Math.max(-1, Math.min(1, x)) * 0.8 : 0;
+    const g = gain * (car ? this.loudness(car) : 1);
+    audio.play(name, { pan, gain: g, strength });
+    if (this.net?.isHost && !local) this.net.event(['s', name, +pan.toFixed(2), +g.toFixed(2), +(strength ?? 0).toFixed(1)]);
+  }
+
+  /** Volumen de los sonidos de un auto: los de personas más fuertes que los de la CPU o los rivales online. */
+  loudness(car) {
+    const i = this.cars.indexOf(car);
+    if (this.net) return i === this.net.localIndex ? 1 : 0.6;
+    return this.drivers?.[i] ? 0.5 : 1;
+  }
+
+  /** Cada cuadro: motores, sonidos de los autos, vueltas y la intensidad de la música. */
+  updateAudio(dt) {
+    if (this.startCue) {
+      this.startCue = false;
+      audio.music.play('race', 0);
+      audio.play('race-start');
+    }
+    const racing = this.state === 'racing';
+    audio.engines.update(
+      dt,
+      racing ? this.cars : [],
+      (car) => Math.max(-1, Math.min(1, this.rig.toNDC(car.position).x)) * 0.7,
+      (car) => this.loudness(car),
+    );
+    // Choques, saltos, caídas… (los pide cada auto; online solo los simula el anfitrión)
+    for (const car of this.cars) {
+      for (const [name, strength] of car.sounds) this.sfx(name, { car, strength });
+      car.sounds.length = 0;
+    }
+    if (!racing) return;
+    // Vueltas: suena cada vuelta completada; la primera vez que alguien entra en la última, cambia la música
+    this.cars.forEach((car, i) => {
+      const lap = Math.min(this.laps, this.track.lap(car));
+      if (lap <= this.lapsSeen[i]) return;
+      this.lapsSeen[i] = lap;
+      if (lap === this.laps && !this.finalLap) {
+        this.finalLap = true;
+        audio.play('final-lap');
+        audio.music.setIntensity(1);
+      } else audio.play('lap', { gain: this.loudness(car), minGap: 0.2 });
+    });
   }
 
   updateHUD() {

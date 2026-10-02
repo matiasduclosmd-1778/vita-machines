@@ -8,7 +8,12 @@ const V = GAME_CONFIG.vehicle;
 const clamp = THREE.MathUtils.clamp;
 const NO_INPUT = { throttle: 0, steer: 0 };
 const STOP_INPUT = { throttle: 0, steer: 0, stop: true };
+const NO_CONTROL = { throttle: 0, steer: 0 }; // en un trompo: sin acelerar ni doblar, pero sin frenar
 const WHEEL_RADIUS = 0.32;
+// Etiqueta con el nombre sobre el auto: canvas de LABEL_W×LABEL_H px, LABEL_SIZE unidades de alto
+const LABEL_W = 512;
+const LABEL_H = 128;
+const LABEL_SIZE = 0.85;
 const TUMBLE_CENTER = 0.6; // altura del eje sobre el que gira la carrocería al dar vueltas
 
 /** Multiplicadores neutros. Los efectos de power-ups los modifican cada paso (ver EffectManager). */
@@ -78,6 +83,11 @@ export class Car {
     this.steer = 0;
     this.yawRate = 0;
     this.spin = 0; // giro extra provocado por golpes
+    this.spinOut = 0; // segundos que le quedan de trompo sin control (vehículos frágiles)
+    this.jumpCooldown = 0;
+    this.sounds = []; // sonidos pendientes (choques, saltos…): los reproduce Game cada cuadro
+    this.soundAt ??= {};
+    this.knockSide = 1;
     this.tumble = null; // vuelta en el aire después de una explosión
     this.mods = { ...this.baseMods };
     this.forwardSpeed = 0;
@@ -102,6 +112,7 @@ export class Car {
   dispose(scene) {
     scene.remove(this.mesh);
     this.paintMaterial.dispose();
+    this.labelTexture.dispose();
   }
 
   eliminate() {
@@ -111,9 +122,14 @@ export class Car {
 
   step(dt, input = NO_INPUT) {
     if (!this.alive || this.fall) input = STOP_INPUT;
+    else if (this.spinOut > 0) {
+      this.spinOut = Math.max(0, this.spinOut - dt);
+      input = NO_CONTROL;
+    }
     this.prevX = this.position.x;
     this.prevZ = this.position.z;
     if (!this.grounded) return this.stepAir(dt);
+    if (this.jumpCooldown > 0) this.jumpCooldown -= dt;
     const sinH = Math.sin(this.heading);
     const cosH = Math.cos(this.heading);
     const v = this.velocity;
@@ -165,14 +181,15 @@ export class Car {
     this.yawRate += (targetYawRate - this.yawRate) * Math.min(1, V.yawResponse * dt);
 
     // Grip lateral: girando fuerte a alta velocidad desliza apenas
-    const grip = V.grip * mods.grip * (1 - V.driftGripLoss * Math.abs(this.steer) * speedRatio);
+    let grip = V.grip * mods.grip * (1 - V.driftGripLoss * Math.abs(this.steer) * speedRatio);
+    if (this.spinOut > 0) grip *= this.fragile.grip; // en el trompo patina
     lat *= Math.exp(-grip * dt);
 
     // Recomponer con los ejes actuales y luego rotar: la inercia genera un leve deslizamiento
     v.x = fwd * sinH + lat * cosH;
     v.z = fwd * cosH - lat * sinH;
     this.heading += (this.yawRate + this.spin) * dt;
-    this.spin *= Math.exp(-GAME_CONFIG.collision.spinDamping * dt);
+    this.spin *= Math.exp(-this.spinDamping * dt);
     this.position.x += v.x * dt;
     this.position.z += v.z * dt;
 
@@ -187,7 +204,7 @@ export class Car {
     this.position.z += this.velocity.z * dt;
     this.heading += (this.yawRate + this.spin) * dt;
     this.yawRate *= Math.exp(-3 * dt);
-    this.spin *= Math.exp(-GAME_CONFIG.collision.spinDamping * dt);
+    this.spin *= Math.exp(-this.spinDamping * dt);
     this.forwardSpeed = this.velocity.x * Math.sin(this.heading) + this.velocity.z * Math.cos(this.heading);
     this.accelLong = 0;
     this.updateCircles();
@@ -219,9 +236,51 @@ export class Car {
     b.z = this.position.z - fz;
   }
 
+  /**
+   * Salto (solo vehículos con `jump`, como la moto): despega con velocidad vertical; la gravedad
+   * y el aterrizaje los maneja Terrain. En el aire pasa por encima de autos y obstáculos.
+   */
+  jump() {
+    const J = this.jumpSpec;
+    if (!J || !this.grounded || this.fall || !this.alive || this.spinOut > 0 || this.jumpCooldown > 0) return false;
+    this.grounded = false;
+    this.vy = Math.max(this.vy, J.speed);
+    this.airTime = 0;
+    this.jumpCooldown = J.cooldown;
+    this.sound('jump');
+    return true;
+  }
+
+  /** Pide un sonido de este auto (ver Game.playCarSounds). Cada uno, como mucho cada 0,15 s. */
+  sound(name, strength = 0) {
+    const now = performance.now();
+    if (now - (this.soundAt[name] ?? 0) < 150) return;
+    this.soundAt[name] = now;
+    this.sounds.push([name, strength]);
+  }
+
+  /** Qué tan rápido se frena el giro por golpes (en un trompo, más lento). */
+  get spinDamping() {
+    return this.spinOut > 0 ? this.fragile.spinDamping : GAME_CONFIG.collision.spinDamping;
+  }
+
+  /**
+   * Choque contra un vehículo frágil (la moto): si fue fuerte, sale en trompo sin control.
+   * strength: velocidad de choque · side: sentido del giro (1 o -1).
+   */
+  knockSpin(strength, side) {
+    const F = this.fragile;
+    if (!F || this.fall || !this.alive || strength < F.minImpact) return;
+    const k = Math.min(1, (strength - F.minImpact) / (F.fullImpact - F.minImpact));
+    this.spin = side * F.spinRate * (0.45 + 0.55 * k);
+    this.spinOut = Math.max(this.spinOut, F.spinTime * (0.4 + 0.6 * k));
+    this.knockSide = side;
+    this.sound('spinout');
+  }
+
   /** Golpe visual de la carrocería (strength ≈ velocidad de impacto). */
   onImpact(strength) {
-    this.bumpVel += Math.min(strength, 20) * 0.12;
+    this.bumpVel += Math.min(strength, 20) * 0.12 * (this.fragile?.bump ?? 1);
   }
 
   syncMesh(dt) {
@@ -235,8 +294,11 @@ export class Car {
     if (this.blink > 0) this.blink = Math.max(0, this.blink - dt);
     this.mesh.visible = this.blink <= 0 || Math.floor(this.blink * 12) % 2 === 0;
 
-    // Inclinación: se inclina hacia afuera en curva y cabecea al acelerar/frenar
-    const targetRoll = clamp(this.forwardSpeed * this.yawRate * 0.006, -0.14, 0.14);
+    // Inclinación: el auto se inclina hacia afuera en curva (la moto, hacia adentro) y cabecea al acelerar/frenar
+    let targetRoll = this.lean
+      ? clamp(-this.forwardSpeed * this.yawRate * 0.016, -0.5, 0.5)
+      : clamp(this.forwardSpeed * this.yawRate * 0.006, -0.14, 0.14);
+    if (this.spinOut > 0) targetRoll = this.knockSide * this.fragile.knockRoll; // queda tirada de costado
     const targetPitch = clamp(-this.accelLong * 0.0035, -0.09, 0.09);
     const k = 1 - Math.exp(-10 * dt);
     this.roll += (targetRoll - this.roll) * k;
@@ -270,6 +332,13 @@ export class Car {
    */
   setDriver(driver) {
     this.driver = driver;
+    // El vehículo del piloto: las motos se inclinan hacia adentro de la curva y son livianas y frágiles
+    const vehicle = GAME_CONFIG.cars.find((c) => c.id === driver?.car);
+    this.lean = !!vehicle?.lean;
+    this.fragile = vehicle?.fragile ?? null;
+    this.jumpSpec = vehicle?.jump ?? null;
+    this.mass = this.fragile?.mass ?? 1;
+    this.spinOut = 0;
     const S = GAME_CONFIG.driverStats;
     const d = (k) => (driver ? driver.stats[k] - S.base : 0);
     this.baseMods = {
@@ -287,15 +356,15 @@ export class Car {
    * Reemplaza la carrocería de primitivas por un modelo 3D (ver world/CarModel.js).
    * La física, las colisiones y la inclinación siguen siendo las mismas.
    */
-  applyModel(model, color = this.player.paint ?? this.player.color) {
-    const key = `${model.id}:${color}`;
+  applyModel(model, color = this.player.paint ?? this.player.color, tinted = false) {
+    const key = `${model.id}:${color}:${tinted}`;
     if (this.modelKey === key) return;
     if (this.model) {
       // Cambio de auto entre carreras: se saca el anterior (la geometría es compartida, la pintura no)
       this.chassis.remove(this.model);
       this.paintMaterial.dispose();
     }
-    const { object, paint } = instantiateCar(model, color);
+    const { object, paint } = instantiateCar(model, color, tinted);
     for (const child of [...this.chassis.children]) child.visible = false;
     for (const w of this.wheels) w.visible = false;
     this.chassis.add(object);
@@ -371,14 +440,57 @@ export class Car {
       }
     }
 
-    // Marcador flotante con el color del jugador (para ubicarlo con zoom lejano)
-    const marker = new THREE.Mesh(
-      new THREE.ConeGeometry(0.45, 0.8, 4),
+    // Marcador flotante con el color del jugador (para ubicarlo con zoom lejano):
+    // una flechita y, arriba, una etiqueta con su nombre que siempre mira a la cámara
+    const marker = new THREE.Group();
+    marker.position.y = 2.4;
+    const arrow = new THREE.Mesh(
+      new THREE.ConeGeometry(0.32, 0.6, 4),
       new THREE.MeshBasicMaterial({ color: this.player.color }), // color de interfaz, bien visible
     );
-    marker.rotation.x = Math.PI;
-    marker.position.y = 2.4;
+    arrow.rotation.x = Math.PI;
+    this.labelCanvas = document.createElement('canvas');
+    this.labelCanvas.width = LABEL_W;
+    this.labelCanvas.height = LABEL_H;
+    this.labelTexture = new THREE.CanvasTexture(this.labelCanvas);
+    this.labelTexture.colorSpace = THREE.SRGBColorSpace;
+    const label = new THREE.Sprite(
+      new THREE.SpriteMaterial({ map: this.labelTexture, transparent: true, depthTest: false, toneMapped: false }),
+    );
+    label.scale.set(LABEL_SIZE * (LABEL_W / LABEL_H), LABEL_SIZE, 1);
+    label.position.y = 0.95;
+    label.renderOrder = 10; // por encima de todo: se lee aunque el auto pase detrás de algo
+    marker.add(arrow, label);
     this.marker = marker;
     this.mesh.add(marker);
+    this.setLabel(this.player.name);
+  }
+
+  /** Texto de la etiqueta flotante (el nombre del jugador). */
+  setLabel(text) {
+    text = String(text ?? '').slice(0, 12);
+    if (text === this.labelText) return;
+    this.labelText = text;
+    const c = this.labelCanvas;
+    const ctx = c.getContext('2d');
+    ctx.clearRect(0, 0, c.width, c.height);
+    ctx.font = `${LABEL_H * 0.56}px "Lilita One", sans-serif`;
+    const w = Math.min(c.width - 12, ctx.measureText(text).width + LABEL_H * 0.6);
+    const x = (c.width - w) / 2;
+    ctx.beginPath();
+    ctx.roundRect(x, 6, w, c.height - 12, (c.height - 12) / 2);
+    ctx.fillStyle = this.player.color;
+    ctx.fill();
+    ctx.lineWidth = 8;
+    ctx.strokeStyle = '#111318';
+    ctx.stroke();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 9;
+    ctx.strokeText(text, c.width / 2, c.height / 2 + 2, w - 20);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(text, c.width / 2, c.height / 2 + 2, w - 20);
+    this.labelTexture.needsUpdate = true;
   }
 }

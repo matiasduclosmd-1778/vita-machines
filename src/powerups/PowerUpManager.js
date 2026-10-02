@@ -30,6 +30,8 @@ export class PowerUpManager {
     this.nextId = 0;
     this.time = 0;
     this.onPickup = null; // (car, type) → void, opcional (HUD)
+    this.onUse = null; // (car, type) → void, opcional (sonido)
+    this.onSound = null; // (nombre, posición, { local, strength }) → void (ver Game.sfx)
     this.enabled = true;
     this.boxes = [];
     this.setAmount('normal');
@@ -78,6 +80,7 @@ export class PowerUpManager {
     const type = this.inventory(car).take();
     if (!type) return false;
     type.use(this, car);
+    this.onUse?.(car, type);
     return true;
   }
 
@@ -155,11 +158,18 @@ export class PowerUpManager {
     // Gira hacia el lado al que lo empuja la explosión (izquierda del auto = (cos h, -sin h))
     const left = dir.x * Math.cos(target.heading) - dir.z * Math.sin(target.heading);
     const air = target.launch(cfg.launchSpeed, cfg.turns, left >= 0 ? 1 : -1);
+    this.sound('stun', target.position);
     this.effects.add(target, StunnedEffect, air + cfg.stunDuration * t);
+  }
+
+  /** Sonido con posición (lo reproduce Game; online, el anfitrión se lo manda a los invitados). */
+  sound(name, pos, opts) {
+    this.onSound?.(name, pos, opts);
   }
 
   explosion(pos, scale = 1) {
     this.onExplosion?.(pos, scale); // online: el anfitrión se lo avisa a los invitados
+    this.sound('explosion', pos, { local: true, strength: scale }); // los invitados la recrean (y suena ahí)
     const y = pos.y ?? 0;
     this.particles.burst({ x: pos.x, y: y + 0.6, z: pos.z }, Math.round(28 * scale), { color: '#ff9f1c', speed: 12 * scale, up: 8 * scale, size: 0.45 * scale, gravity: 14 });
     this.particles.burst({ x: pos.x, y: y + 0.6, z: pos.z }, Math.round(14 * scale), { color: '#ffe14d', speed: 7 * scale, up: 5, size: 0.35 * scale });

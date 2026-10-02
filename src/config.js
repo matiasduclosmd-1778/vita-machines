@@ -34,7 +34,7 @@ export const GAME_CONFIG = {
       driver: 'coco', // piloto por defecto (se elige en "Elegí tu piloto")
       controlsLabel: 'WASD',
       useLabel: 'Espacio',
-      controls: { up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD', use: 'Space' },
+      controls: { up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD', use: 'Space', jump: 'ShiftLeft' },
     },
     {
       name: 'Jugador 2',
@@ -44,14 +44,38 @@ export const GAME_CONFIG = {
       driver: 'faxo',
       controlsLabel: 'Flechas',
       useLabel: 'Enter',
-      controls: { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight', use: 'Enter' },
+      controls: { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight', use: 'Enter', jump: 'ShiftRight' },
+    },
+    {
+      name: 'Jugador 3',
+      short: 'P3',
+      color: '#5cc24a',
+      paint: '#2f7d32',
+      driver: 'domono',
+      controlsLabel: 'IJKL',
+      useLabel: 'U',
+      controls: { up: 'KeyI', down: 'KeyK', left: 'KeyJ', right: 'KeyL', use: 'KeyU', jump: 'KeyO' },
+    },
+    {
+      name: 'Jugador 4',
+      short: 'P4',
+      color: '#ffc93c',
+      paint: '#d99a00',
+      driver: 'coco',
+      controlsLabel: 'Num 8456',
+      useLabel: 'Num 0',
+      controls: { up: 'Numpad8', down: 'Numpad5', left: 'Numpad4', right: 'Numpad6', use: 'Numpad0', jump: 'NumpadEnter' },
     },
   ],
+  // Partida local: hasta `max` autos entre personas (cada una con teclado o joystick, ver Input.js)
+  // y pilotos de la computadora. Por defecto, 1 persona contra 1 CPU.
+  localPlayers: { max: 4, humans: 1, cpus: 1, nameMax: 12 },
 
   // Pilotos de "Elegí tu piloto". Cada uno maneja su auto (`car`, ver `cars`) con su pintura.
   //  stats (0–10) cambian el manejo respecto de la base, ver `driverStats` · kmh: solo para mostrar
   //  portrait / carImage: imágenes en src/assets/pilots/ · w, t, l: tamaño y posición del retrato
   //  c1, c2: degradé del fondo de la tarjeta
+  //  podium: cómo se ve arriba del podio (w: ancho relativo al escalón, hide: cuánto queda detrás del bloque)
   drivers: [
     {
       id: 'coco',
@@ -67,6 +91,7 @@ export const GAME_CONFIG = {
       carImage: 'el-coco-toyota-corolla.webp',
       w: '112%', t: '0%', l: '52%',
       c1: '#5c7be0', c2: '#1f2c63',
+      podium: { w: 1.55, hide: '44%' },
     },
     {
       id: 'domono',
@@ -82,6 +107,7 @@ export const GAME_CONFIG = {
       carImage: 'dj-domono-peugeot-partner.webp',
       w: '74%', t: '2%', l: '36%',
       c1: '#7f9a63', c2: '#2f4a2c',
+      podium: { w: 0.8, hide: '26%' },
     },
     {
       id: 'faxo',
@@ -97,6 +123,23 @@ export const GAME_CONFIG = {
       carImage: 'dr-faxo-renault-clio.webp',
       w: '64%', t: '3%', l: '36%',
       c1: '#a7e86e', c2: '#45423e',
+      podium: { w: 0.7, hide: '24%' },
+    },
+    {
+      id: 'pablo',
+      name: 'PabloQuemandoRuedas',
+      car: 'moto',
+      carLabel: 'Yamaha XTZ 125',
+      paint: '#1d2a4f',
+      paintName: 'Azul y naranja',
+      quip: 'Una rueda o dos, depende del día.',
+      stats: { vel: 8, acel: 10, man: 8, res: 3 },
+      kmh: 184,
+      portrait: 'pablo-quemando-ruedas.webp',
+      carImage: 'pablo-quemando-ruedas-yamaha-xtz125.webp',
+      w: '64%', t: '0%', l: '38%',
+      c1: '#f0883a', c2: '#1d2a4f',
+      podium: { w: 0.6, hide: '34%' },
     },
   ],
 
@@ -112,6 +155,10 @@ export const GAME_CONFIG = {
   // Modelos de los autos. Todos tienen la misma física; el manejo lo cambian las stats del piloto.
   //  file: modelo optimizado en src/assets/models/ · paint: material que se repinta con el color del jugador
   //  yawOffset: corrección si el frente queda al revés (Math.PI) · materials: ajustes por nombre de material
+  //  length: largo propio (si no, vehicle.model.length) · textured: conserva su textura (no se repinta)
+  //  lean: se inclina hacia adentro en las curvas (motos)
+  //  fragile: vehículo liviano que sale en trompo cuando lo chocan (ver Car.knockSpin)
+  //  jump: puede saltar con la tecla de saltar (ver Car.jump)
   cars: [
     {
       id: 'corolla',
@@ -161,6 +208,30 @@ export const GAME_CONFIG = {
         [/smallspecmap/i, { color: '#e8e8e8', metalness: 0.9, roughness: 0.15 }], // faros
         [/mirror|^gris$/i, { metalness: 1, roughness: 0.15 }], // espejos y cromados
       ],
+    },
+    {
+      id: 'moto',
+      name: 'Moto',
+      file: 'moto.glb',
+      textured: true, // un solo material con textura: no hay carrocería para repintar
+      length: 2.1, // más corta que un auto (la colisión es la misma)
+      lean: true,
+      yawOffset: 0,
+      fragile: {
+        mass: 0.55, // en un choque contra un auto (masa 1) se lleva casi el doble de empujón
+        minImpact: 3, // velocidad de choque (u/s) a partir de la cual sale en trompo
+        fullImpact: 12, // a esta velocidad de choque, el trompo es completo
+        spinRate: 14, // giro del trompo (rad/s): ~2 vueltas por segundo
+        spinTime: 1.0, // segundos sin control en el trompo completo
+        spinDamping: 1.2, // el trompo se frena más lento que el giro normal por golpes
+        grip: 0.12, // agarre durante el trompo: patina
+        knockRoll: 0.85, // cuánto queda tirada de costado mientras gira (rad)
+        bump: 2, // rebote visual de los golpes, comparado con un auto
+      },
+      jump: {
+        speed: 13, // velocidad vertical del salto (u/s): sube ~2 u y pasa por encima de autos y obstáculos
+        cooldown: 0.35, // segundos en el piso antes de poder volver a saltar
+      },
     },
   ],
 

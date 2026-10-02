@@ -1,3 +1,4 @@
+import { audio } from '../audio/index.js';
 import { GAME_CONFIG } from '../config.js';
 import { PlayerState } from '../Car.js';
 import { POWERUP_TYPES, EFFECT_TYPES, ENTITY_VIEWS } from '../powerups/types/index.js';
@@ -39,6 +40,10 @@ export class HostSync {
       const i = this.ids.indexOf(m.id);
       if (i >= 0 && game.state === 'racing') game.powerups.use(game.cars[i]);
     });
+    session.on('jump', (m) => {
+      const i = this.ids.indexOf(m.id);
+      if (i >= 0 && game.state === 'racing') game.cars[i].jump();
+    });
     session.on('left', (p) => {
       // Se desconectó en plena carrera: su auto queda eliminado
       const i = this.ids.indexOf(p.id);
@@ -55,6 +60,10 @@ export class HostSync {
 
   useItem() {
     this.game.powerups.use(this.game.cars[this.localIndex]);
+  }
+
+  jump() {
+    this.game.cars[this.localIndex].jump();
   }
 
   event(e) {
@@ -101,7 +110,7 @@ export class HostSync {
   }
 
   dispose() {
-    for (const ev of ['input', 'use', 'left']) this.session.off(ev);
+    for (const ev of ['input', 'use', 'jump', 'left']) this.session.off(ev);
     this.game.powerups.onExplosion = null;
   }
 }
@@ -130,6 +139,10 @@ export class GuestSync {
 
   useItem() {
     this.session.sendUse();
+  }
+
+  jump() {
+    this.session.sendJump();
   }
 
   event() {}
@@ -255,10 +268,12 @@ export class GuestSync {
   playEvent(ev) {
     const g = this.game;
     if (ev[0] === 'x') g.powerups.explosion({ x: ev[1], y: ev[2], z: ev[3] }, ev[4]);
+    else if (ev[0] === 's') audio.play(ev[1], { pan: ev[2], gain: ev[3], strength: ev[4] });
     else if (ev[0] === 'p') {
       const car = g.cars[ev[1]];
       if (!car) return;
       g.hud.flashItem(ev[1]);
+      g.sfx('pickup', { car, local: true });
       const p = car.position;
       g.powerups.particles.burst({ x: p.x, y: p.y + 1.3, z: p.z }, 14, { color: '#ffe14d', speed: 6, up: 4, size: 0.28 });
     }

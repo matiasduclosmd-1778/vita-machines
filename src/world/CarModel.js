@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { GAME_CONFIG } from '../config.js';
 
 const M = GAME_CONFIG.vehicle.model;
@@ -12,7 +13,7 @@ const NOT_PAINT = /glass|window|vidrio|light|lamp|chrome|tire|tyre|rubber|wheel|
  *  - escalado al largo del auto del juego y apoyado en el piso (y = 0);
  *  - orientado con el frente hacia +Z (la convención de Car.js);
  *  - con el material de la carrocería identificado para poder pintarlo.
- * `spec` es su entrada en GAME_CONFIG.cars ({ id, paint, yawOffset, materials }).
+ * `spec` es su entrada en GAME_CONFIG.cars ({ id, paint, yawOffset, materials, length, textured }).
  * Devuelve null si no se pudo cargar (el juego sigue con el auto hecho con primitivas).
  */
 export async function loadCarModel(url, spec = {}) {
@@ -39,7 +40,7 @@ export async function loadCarModel(url, spec = {}) {
   // Escala y apoyo en el piso, centrado
   box = new THREE.Box3().setFromObject(pivot);
   size = box.getSize(new THREE.Vector3());
-  const scale = M.length / size.z;
+  const scale = (spec.length ?? M.length) / size.z;
   root.scale.multiplyScalar(scale);
   pivot.updateMatrixWorld(true);
   box = new THREE.Box3().setFromObject(pivot);
@@ -84,11 +85,13 @@ export async function loadCarModel(url, spec = {}) {
     }
   });
 
-  // Carrocería: la indicada en la configuración; si no, se adivina por nombre y superficie
+  // Carrocería: la indicada en la configuración; si no, se adivina por nombre y superficie.
+  // Los modelos `textured` (todo en una textura, como la moto) no tienen carrocería que repintar.
   const named = [...stats.keys()].filter((m) => PAINT_NAME.test(m.name || '') && !NOT_PAINT.test(m.name || ''));
   let paint = [...stats.keys()].find((m) => m.name === spec.paint);
-  paint ??= named.sort((x, y) => stats.get(y).area - stats.get(x).area)[0];
-  if (!paint) {
+  if (spec.textured) paint = null;
+  else paint ??= named.sort((x, y) => stats.get(y).area - stats.get(x).area)[0];
+  if (!paint && !spec.textured) {
     // Sin nombres útiles: el material claro, opaco y no metálico-espejo con más superficie
     paint = [...stats.keys()]
       .filter((m) => !m.transparent && !NOT_PAINT.test(m.name || '') && m.color && lum(m.color) > 0.45)
@@ -115,9 +118,28 @@ export function carPaint(color) {
   });
 }
 
-/** Clona el modelo con la carrocería pintada de `color`. */
-export function instantiateCar(model, color) {
+/**
+ * Clona el modelo con la carrocería pintada de `color`. Un modelo sin carrocería (texturado) conserva
+ * su textura; con `tinted` (piloto repetido) se le da un tinte de `color` para distinguirlo.
+ * Devuelve el material que brilla con el turbo.
+ */
+export function instantiateCar(model, color, tinted = false) {
   const clone = model.scene.clone(true);
+  if (!model.paint) {
+    const copies = new Map();
+    const copy = (m) => {
+      if (!copies.has(m)) {
+        const c = m.clone();
+        if (tinted) c.color.set('#ffffff').lerp(new THREE.Color(color), 0.6);
+        copies.set(m, c);
+      }
+      return copies.get(m);
+    };
+    clone.traverse((o) => {
+      if (o.isMesh) o.material = Array.isArray(o.material) ? o.material.map(copy) : copy(o.material);
+    });
+    return { object: clone, paint: copies.values().next().value };
+  }
   const paint = carPaint(color);
   clone.traverse((o) => {
     if (!o.isMesh) return;
@@ -189,4 +211,74 @@ function tuneMaterial(m, rules) {
 
 function lum(c) {
   return 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+}
+
+/**
+ * Imagen del vehículo (PNG con fondo transparente, vista de tres cuartos) para las tarjetas de piloto
+ * que todavía no tienen su ilustración. Usa un renderer propio y lo libera al terminar.
+ */
+export function renderCarImage(model, color, width = 640, height = 400) {
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+  try {
+    renderer.setSize(width, height, false);
+    renderer.setClearColor(0x000000, 0);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    const scene = new THREE.Scene();
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    scene.add(new THREE.HemisphereLight(0xfff4e0, 0x404050, 1.2));
+    const sun = new THREE.DirectionalLight(0xffffff, 2.2);
+    sun.position.set(-3, 6, 5);
+    scene.add(sun);
+    const { object } = instantiateCar(model, color);
+    scene.add(object);
+
+    // Tres cuartos de frente desde la derecha, encuadrando el modelo
+    const box = new THREE.Box3().setFromObject(object);
+    const center = box.getCenter(new THREE.Vector3());
+    const radius = box.getSize(new THREE.Vector3()).length() / 2;
+    const camera = new THREE.PerspectiveCamera(28, width / height, 0.05, 100);
+    const dir = new THREE.Vector3(-0.85, 0.42, 0.9).normalize();
+    camera.position.copy(center).addScaledVector(dir, radius / Math.sin((14 * Math.PI) / 180) * 0.95);
+    camera.lookAt(center);
+    renderer.render(scene, camera);
+    pmrem.dispose();
+    return cropToContent(renderer.domElement);
+  } catch (e) {
+    console.warn('[auto] no se pudo generar la imagen del vehículo:', e);
+    return null;
+  } finally {
+    renderer.dispose();
+    renderer.forceContextLoss();
+  }
+}
+
+/** Recorta un canvas a lo que no es transparente (con un margen chico) y lo devuelve como PNG. */
+function cropToContent(source, pad = 6) {
+  const c = document.createElement('canvas');
+  c.width = source.width;
+  c.height = source.height;
+  const ctx = c.getContext('2d');
+  ctx.drawImage(source, 0, 0);
+  const { data, width, height } = ctx.getImageData(0, 0, c.width, c.height);
+  let x0 = width, y0 = height, x1 = -1, y1 = -1;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (data[(y * width + x) * 4 + 3] < 8) continue;
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+    }
+  }
+  if (x1 < 0) return c.toDataURL('image/png');
+  x0 = Math.max(0, x0 - pad);
+  y0 = Math.max(0, y0 - pad);
+  x1 = Math.min(width - 1, x1 + pad);
+  y1 = Math.min(height - 1, y1 + pad);
+  const out = document.createElement('canvas');
+  out.width = x1 - x0 + 1;
+  out.height = y1 - y0 + 1;
+  out.getContext('2d').drawImage(c, x0, y0, out.width, out.height, 0, 0, out.width, out.height);
+  return out.toDataURL('image/png');
 }

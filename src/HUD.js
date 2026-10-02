@@ -1,5 +1,7 @@
 import { PlayerState } from './Car.js';
 import { controlsSummary, keyLabel } from './ui/Settings.js';
+import { podiumHTML, renderPodium } from './ui/Podium.js';
+import { audio } from './audio/index.js';
 
 /** HUD en HTML/CSS superpuesto al canvas. */
 export class HUD {
@@ -7,7 +9,7 @@ export class HUD {
     this.root = root;
     this.onlineActions = {}; // { back(), leave() } en el online (los pone main.js)
     root.innerHTML = `
-      <div class="top ${players.length > 2 ? 'compact' : ''}">
+      <div class="top">
         ${players.map((p, i) => `
           <div class="card" data-i="${i}" style="--c:${p.color}">
             <div class="card-name">${p.name}</div>
@@ -32,28 +34,7 @@ export class HUD {
           </div>`).join('')}
       </div>
       ${players.map((p) => `<div class="edge-arrow hidden" style="--c:${p.color}"><span class="arrow">➤</span><span class="tag">${p.short}</span></div>`).join('')}
-      <div class="result hidden">
-        <div class="result-box">
-          <div class="band"></div>
-          <div class="result-body">
-            <div class="result-title"></div>
-            <div class="result-sub"></div>
-            <div class="result-actions" data-mode="local">
-              <button class="vm-btn yellow center restart">REVANCHA</button>
-              <button class="vm-btn center menu-btn">MENÚ</button>
-            </div>
-            <div class="result-actions hidden" data-mode="host">
-              <button class="vm-btn yellow center net-back">VOLVER AL LOBBY</button>
-              <button class="vm-btn center net-leave">CERRAR LOBBY</button>
-            </div>
-            <div class="result-actions hidden" data-mode="guest">
-              <div class="result-wait">Esperando al anfitrión…</div>
-              <button class="vm-btn center net-leave">SALIR</button>
-            </div>
-            <div class="result-hint">o presioná <kbd>R</kbd> / <kbd>Enter</kbd></div>
-          </div>
-        </div>
-      </div>`;
+      <div class="result hidden">${podiumHTML()}</div>`;
 
     this.cards = [...root.querySelectorAll('.card')];
     this.countdowns = [...root.querySelectorAll('.cd')];
@@ -79,7 +60,7 @@ export class HUD {
   /** Actualiza las etiquetas de controles (después de reasignar teclas o cambiar de rival). */
   refreshControls(players) {
     players.forEach((p, i) => {
-      p.controlsLabel = controlsSummary(p.controls);
+      p.controlsLabel = controlsSummary(p.controls, p.pad);
       p.useLabel = keyLabel(p.controls.use);
       this.cards[i].querySelector('.card-keys').textContent = p.cpuLabel || p.controlsLabel;
       const key = this.cards[i].querySelector('.item-key');
@@ -133,6 +114,7 @@ export class HUD {
       if (p.countdown != null && p.countdown !== this.lastNumbers[i]) {
         const num = cd.querySelector('.cd-num');
         num.textContent = p.countdown;
+        audio.play('out-tick', { pan: Math.max(-1, Math.min(1, p.ndc.x)) * 0.8, minGap: 0.1 });
         num.classList.remove('pop');
         void num.offsetWidth; // reinicia la animación
         num.classList.add('pop');
@@ -175,12 +157,15 @@ export class HUD {
     this.root.querySelectorAll('.laps').forEach((el) => (el.textContent = laps));
   }
 
-  /** result: { title, color, sub } (ver Game.finish). */
+  /** Podio del final: result = { winner, title, sub, standings } (ver Game.finish). */
   showResult(result) {
-    const title = this.result.querySelector('.result-title');
-    title.textContent = result.title;
-    title.style.color = result.color;
-    this.result.querySelector('.result-sub').textContent = result.sub;
+    if (this.result.classList.contains('hidden')) {
+      audio.music.play('victory');
+      // Locutor: "The winner is…" y el nombre del piloto ganador (una vez, mientras sube el podio)
+      const champ = result.winner >= 0 ? result.standings?.[0]?.driver : null;
+      if (champ) audio.voices.sequence(['winner', champ], 0.8);
+    }
+    renderPodium(this.result, result);
     this.result.classList.remove('hidden');
   }
 
@@ -201,6 +186,11 @@ export class HUD {
   }
 
   hideResult() {
+    if (!this.result.classList.contains('hidden')) {
+      audio.voices.cancel();
+      audio.voices.stop();
+    }
     this.result.classList.add('hidden');
+    this.result.querySelector('.pd-confetti').innerHTML = '';
   }
 }

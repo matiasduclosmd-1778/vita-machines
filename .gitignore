@@ -7,7 +7,13 @@ dist
 2023_toyota_corolla_hybrid.glb
 clio_2.glb
 peugeot_partner_tepee.glb
+freedomotor.glb
 # Diseño original de la pantalla de pilotos (las imágenes ya están en src/assets/pilots/)
 vita-machines-seleccion.zip
+# Diseño del podio y arte nuevo (ya incorporados en src/)
+Update*.zip
+Vita Machines · Podio.html
 # Capturas sueltas de pruebas
 s2-*.png
+# Caché de Python (tools/)
+__pycache__/

@@ -46,6 +46,7 @@ export class ShieldEffect extends Effect {
       this.ctx.particles.burst({ x: p.x, y: p.y + 1, z: p.z }, strong ? 26 : 8, { color: '#bff6ff', speed: strong ? 12 : 5, size: 0.3 });
     }
     this.flash = 1;
+    this.ctx.sound('shield-hit', this.car.position);
     if (strong && CFG.consumeOnBomb) this.remaining = Math.min(this.remaining, 0.25);
   }
 

@@ -101,10 +101,11 @@ Cada piloto (`GAME_CONFIG.drivers`) maneja su auto con su pintura:
 | El Coco | Toyota Corolla · azul medianoche | 9 | 7 | 5 | 7 |
 | Dj Domono | Peugeot Partner · blanca | 6 | 5 | 6 | 10 |
 | Dr Faxo | Renault Clio · gris topo | 7 | 9 | 9 | 5 |
+| PabloQuemandoRuedas | Yamaha XTZ 125 · azul y naranja | 8 | 10 | 8 | 3 |
 
 Las stats cambian el manejo respecto de la base (7) según `GAME_CONFIG.driverStats`: Velocidad → velocidad máxima, Aceleración → empuje, Manejo → giro y grip, Resistencia → cuánto lo empujan, frenan y aturden la bomba y el misil. Los km/h de la tarjeta son solo de muestra. Retratos e imágenes de los autos en `src/assets/pilots/` (WebP).
 
-Los modelos 3D están en `GAME_CONFIG.cars` (`src/config.js`): archivo, material que se repinta con el color del piloto, corrección de orientación y ajustes de materiales por nombre. Los modelos se cargan en paralelo al iniciar (`src/world/CarModel.js`); si alguno está riggeado (piezas ubicadas por huesos, como el Partner) se hornea su pose en una malla común.
+Los modelos 3D están en `GAME_CONFIG.cars` (`src/config.js`): archivo, material que se repinta con el color del piloto, corrección de orientación y ajustes de materiales por nombre. Un modelo `textured` (todo en una sola textura, como la moto) no se repinta: conserva su textura y, si el piloto está repetido, toma un tinte del color del jugador. `length` cambia su largo y `lean: true` lo inclina hacia adentro en las curvas. Si un piloto no tiene `portrait` o `carImage`, su tarjeta muestra sus iniciales y un render del modelo 3D. Los modelos se cargan en paralelo al iniciar (`src/world/CarModel.js`); si alguno está riggeado (piezas ubicadas por huesos, como el Partner) se hornea su pose en una malla común.
 
 Para agregar uno:
 
@@ -122,6 +123,18 @@ npx @gltf-transform/cli optimize original.glb src/assets/models/nuevo.glb \
 - Iluminación basada en imagen: mapa de entorno generado en tiempo real (cielo de tarde + ventana del lado del sol) que ilumina y se refleja en todos los materiales.
 - Materiales físicos (`src/world/materials.js`): pintura con barniz, plástico, cerámica, cromo, vidrio con refracción (cajas "?"), pompa iridiscente (escudo), aceite tornasolado.
 - Todo se ajusta en `GAME_CONFIG.graphics`.
+
+## Música y sonido
+
+Todo el audio se sintetiza en vivo con Web Audio (sin archivos), en `src/audio/`. Arranca con la primera tecla, clic o botón del joystick (el navegador no deja sonar nada antes). Volúmenes en Configuración → Audio; **M** silencia.
+
+- **Música** (`Music.js`): synthwave con secuenciador de 16 pasos, pads de sierras desafinadas, bajo con "bombeo" (sidechain), arpegios con delay a tempo, snare con reverb grande.
+  - `menu` 118 BPM, La menor. En la elección de piloto entra la batería completa y la melodía.
+  - `race` 138 BPM, Mi menor, con estribillo. En la última vuelta se abren los filtros y el lead no para.
+  - `victory` fanfarria ♭VI–♭VII–I que sigue en `podium` (112 BPM, Do mayor).
+- **Efectos** (`Sfx.js`): motores por auto (rpm con cambios simulados, la moto más aguda), derrape, choques, paredes, saltos, aterrizajes, trompos, caídas, cada power-up, explosiones, vueltas, última vuelta, cuenta fuera de pantalla, eliminación y la interfaz. Se panean según dónde está el auto en pantalla.
+- Online, el anfitrión les manda a los invitados los sonidos que solo él simula (choques, objetos usados, etc.).
+- **Locutor** (`Voices.js`): al confirmar un piloto se escucha su nombre; en el podio, "The winner is…" y el nombre del ganador. La música baja mientras habla. Las voces originales están en `NewSound/` y se procesan con `python3 tools/voices.py` (limpieza de ruido, tono más grave, capa una octava abajo, vocoder en La menor 7, EQ, saturación, compresión, chorus, eco a 118 BPM y reverb) → `src/assets/voices/`. Los ajustes de cada voz (semitonos, vocoder, reverb, eco) están al principio del script.
 
 ## Estructura
 

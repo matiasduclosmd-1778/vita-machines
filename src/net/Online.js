@@ -49,7 +49,7 @@ export async function browseLobbies(onChange) {
  * (jugadores, listos, pilotos, fase) y lo reenvía a todos cada vez que cambia.
  *
  * Eventos (on): 'state' (lobby), 'chat' ({ name, text, system }), 'race' (config de la carrera),
- * 'snap' / 'ev' (carrera, solo invitados), 'input' / 'use' / 'left' (carrera, solo anfitrión), 'closed' (motivo).
+ * 'snap' / 'ev' (carrera, solo invitados), 'input' / 'use' / 'jump' / 'left' (carrera, solo anfitrión), 'closed' (motivo).
  */
 export class OnlineSession {
   /** Crea un lobby nuevo como anfitrión. */
@@ -179,6 +179,9 @@ export class OnlineSession {
         break;
       case 'use':
         if (p) this.emit('use', m);
+        break;
+      case 'jump':
+        if (p) this.emit('jump', m);
         break;
     }
   }
@@ -386,6 +389,10 @@ export class OnlineSession {
 
   sendUse() {
     this.channel.send({ t: 'use', id: this.me.id });
+  }
+
+  sendJump() {
+    this.channel.send({ t: 'jump', id: this.me.id });
   }
 }
 

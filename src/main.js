@@ -1,9 +1,12 @@
 import './style.css';
 import { Game } from './Game.js';
 import { Menu } from './ui/Menu.js';
+import { setVehicleRenders } from './ui/pilots.js';
+import { audio } from './audio/index.js';
+import { input } from './Input.js';
 import { loadSettings } from './ui/Settings.js';
 import { GAME_CONFIG } from './config.js';
-import { loadCarModel } from './world/CarModel.js';
+import { loadCarModel, renderCarImage } from './world/CarModel.js';
 import { OnlineController } from './net/OnlineController.js';
 // Modelos 3D de los autos, optimizados con gltf-transform (Vite los copia al build y devuelve sus URLs)
 const MODEL_URLS = import.meta.glob('./assets/models/*.glb', { query: '?url', import: 'default', eager: true });
@@ -13,6 +16,22 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const settings = loadSettings();
 let game = null;
+
+// Audio: el navegador lo habilita recién con un gesto del jugador (tecla, clic o joystick)
+audio.setVolumes(settings.audio);
+const unlock = () => audio.unlock();
+window.addEventListener('pointerdown', unlock, true);
+window.addEventListener('keydown', unlock, true);
+input.onPress(() => {
+  unlock();
+  return false; // no se queda con el evento
+});
+// M: silenciar / volver a escuchar
+window.addEventListener('keydown', (e) => {
+  if (e.code !== 'KeyM' || e.repeat || e.target.closest?.('input')) return;
+  const muted = audio.toggleMute();
+  menu.toast(muted ? 'Sonido silenciado (M)' : 'Sonido activado');
+});
 
 const menu = new Menu(document.getElementById('menu'), settings, {
   onStartRace: (race) => startRace(race),
@@ -56,7 +75,14 @@ async function boot() {
   game.applySettings(settings);
   menu.setProgress(0.5);
   const models = (await carModels).filter(Boolean);
-  game.setCarModels(Object.fromEntries(models.map((m) => [m.id, m])));
+  const byId = Object.fromEntries(models.map((m) => [m.id, m]));
+  game.setCarModels(byId);
+  // Pilotos sin ilustración del vehículo: la tarjeta usa un render del modelo 3D
+  setVehicleRenders(
+    Object.fromEntries(
+      GAME_CONFIG.drivers.filter((d) => !d.carImage && byId[d.car]).map((d) => [d.id, renderCarImage(byId[d.car], d.paint)]),
+    ),
+  );
   menu.setProgress(0.65);
   await nextFrame();
 
@@ -72,7 +98,7 @@ async function boot() {
   if (settings.profile.name) menu.showHome();
   else menu.showName({ required: true });
 
-  if (import.meta.env.DEV) Object.assign(window, { game, menu, online });
+  if (import.meta.env.DEV) Object.assign(window, { game, menu, online, audio });
 }
 
 async function startRace(race) {
