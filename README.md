@@ -72,7 +72,7 @@ Todo se reasigna en **Jugadores** (también qué joystick usa cada uno). Todos l
 
 Cada ronda (también al reiniciar o en la revancha) empieza con una cuenta 3‑2‑1‑¡YA! (`race.countdown`): los autos quedan quietos y acelerar solo hace rugir el motor. Online la lleva el anfitrión.
 
-La partida se juega a **rondas** (6 por defecto, `GAME_CONFIG.race.rounds`; no hay vueltas). Cada ronda la gana el último que queda en carrera. El ganador festeja: la cámara se le acerca, su vehículo da dos saltitos con una vuelta sobre sí mismo y aparece "GANADOR {nombre}". Después todos vuelven a largar.
+La partida se juega a **rondas** (6 por defecto, `GAME_CONFIG.race.rounds`; no hay vueltas). Cada ronda la gana el último que queda en carrera. El ganador festeja en modo cine (franjas negras, sin HUD): la cámara baja desde la vista de juego y hace un paneo alrededor del vehículo, de atrás hasta el frente, terminando a su altura (`camera.cinematic`), mientras da dos saltitos con una vuelta sobre sí mismo y aparece "GANADOR {nombre}". Después todos vuelven a largar.
 
 Gana la partida el que más rondas gana. Termina antes si alguien ya no puede ser alcanzado; si al final hay empate arriba, se juega una ronda extra. Si en una ronda quedan todos afuera a la vez, nadie suma y se repite.
 

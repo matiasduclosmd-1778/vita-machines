@@ -265,7 +265,7 @@ kbd {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 9%; /* abajo: el ganador queda a la vista en el centro */
+  top: 14vh; /* arriba, debajo de la franja de cine: el ganador queda a la vista en el centro */
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -340,3 +340,26 @@ kbd {
 .pad-mode .kbd-hint { display: none !important; }
 .pad-only { display: none !important; }
 .pad-mode .pad-only { display: flex !important; }
+
+/* --- Modo cine del festejo: franjas negras y HUD oculto -------------------- */
+#hud::before,
+#hud::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  background: #000;
+  z-index: 7;
+  transition: height 0.7s cubic-bezier(0.3, 0, 0.2, 1);
+}
+#hud::before { top: 0; }
+#hud::after { bottom: 0; }
+#hud.cinema::before,
+#hud.cinema::after { height: 11vh; }
+#hud .top,
+#hud .top-actions,
+#hud .round-tag { transition: opacity 0.4s; }
+#hud.cinema .top,
+#hud.cinema .top-actions,
+#hud.cinema .round-tag { opacity: 0; }

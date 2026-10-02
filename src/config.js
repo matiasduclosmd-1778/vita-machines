@@ -6,13 +6,13 @@ const DEG = Math.PI / 180;
 
 export const GAME_CONFIG = {
   debug: {
-    enabled: true, // DEBUG_MODE: panel, zona segura y marcadores. Tecla V para alternar.
+    enabled: false, // DEBUG_MODE: panel, zona segura y marcadores. Tecla V para alternar.
     helpers3D: true, // punto medio, foco de cámara y línea entre jugadores dentro de la escena
   },
 
   // Gráficos. quality: 'high' (todo activado) | 'low' (para máquinas modestas). Tecla G alterna en vivo.
   graphics: {
-    quality: 'high',
+    quality: 'low', // por defecto fluido; la tecla G (o Configuración) activa la alta
     maxPixelRatio: 2, // tope de resolución en pantallas retina (1 = más rápido)
     exposure: 1.0,
     envIntensity: 0.55, // cuánto reflejan/iluminan los materiales el entorno (cielo + ventana)
@@ -233,6 +233,16 @@ export const GAME_CONFIG = {
   ],
 
   camera: {
+    // Paneo cinematográfico alrededor del ganador de la ronda (ver CameraRig.cinematic). Ángulos
+    // respecto del frente del auto: π = detrás. Rango [inicio, fin] para distancia, altura y lente.
+    cinematic: {
+      blend: 0.8, // segundos de transición desde la cámara de juego
+      startAngle: Math.PI + 0.55, // empieza detrás y un poco a la derecha…
+      sweep: -(Math.PI + 1.0), // …y gira ~237° pasando por el costado hasta quedar adelante
+      distance: [8.5, 6.4],
+      height: [4.2, 1.1], // termina a la altura del auto
+      fov: 34, // lente un poco más cerrado: más cine
+    },
     minDistance: 24, // MIN_CAMERA_DISTANCE: lo más cerca que llega
     maxDistance: 60, // MAX_CAMERA_DISTANCE: nunca se aleja más que esto
     fov: 45,
@@ -404,8 +414,8 @@ export const GAME_CONFIG = {
     // hay empate arriba se juega una ronda extra.
     roundOptions: [3, 6, 9], // opciones de "Crear partida"
     rounds: 6, // por defecto
-    celebrate: 3.6, // segundos de festejo del ganador de la ronda (cámara cerca, saltitos con vuelta)
-    closeup: 13, // distancia de cámara durante el festejo
+    celebrate: 4.8, // segundos de festejo del ganador de la ronda (paneo de cámara, saltitos con vuelta)
+    hops: [1.0, 2.5], // en qué momentos del festejo salta (con una vuelta sobre sí mismo)
     countdown: 3, // segundos de la cuenta 3…2…1 antes de largar (los autos quedan quietos)
     goShow: 0.8, // cuánto queda en pantalla el "¡YA!"
   },

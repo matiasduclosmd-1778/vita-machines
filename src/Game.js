@@ -13,6 +13,7 @@ import { Debug } from './Debug.js';
 import { PowerUpManager } from './powerups/PowerUpManager.js';
 import { resolveCarCar, resolveCarObstacles, resolveCarTrack } from './Collision.js';
 import { AIDriver } from './ai/AIDriver.js';
+import { POWERUP_TYPES, EFFECT_TYPES, ENTITY_VIEWS } from './powerups/types/index.js';
 import { localPlayerName } from './ui/Settings.js';
 import { audio } from './audio/index.js';
 
@@ -303,7 +304,29 @@ export class Game {
 
   /** Compila los shaders por adelantado para que la carrera no tartamudee al empezar. */
   warmup() {
+    // Todo lo que aparece recién en carrera (efectos de los objetos, proyectiles, explosiones, vistas
+    // del online) se crea una vez acá, en silencio: así sus shaders se compilan durante la carga y no
+    // con un tirón la primera vez que alguien usa un objeto
+    const pu = this.powerups;
+    const car = this.cars[0];
+    this.muted = true;
+    for (const type of POWERUP_TYPES) {
+      if (type.fire) {
+        type.onPickup?.(pu, car);
+        type.fire(pu, car);
+      } else type.use(pu, car);
+    }
+    for (const E of Object.values(EFFECT_TYPES)) if (!pu.effects.get(car, E.id)) pu.effects.add(car, E, 0.5);
+    pu.explosion(car.position, 1);
+    const views = Object.values(ENTITY_VIEWS).map((View) => new View(pu, [car.position.x, car.position.y, car.position.z, 0, 0]));
+    pu.update(1 / 60);
+    for (const c of this.cars) c.syncMesh(0);
     this.renderer.compile(this.scene, this.rig.camera);
+    this.postfx.render();
+    views.forEach((v) => v.dispose());
+    pu.reset();
+    for (const c of this.cars) c.health = GAME_CONFIG.health.max;
+    this.muted = false;
     this.postfx.render();
   }
 
@@ -394,7 +417,7 @@ export class Game {
       const t0 = this.celebrateTime;
       this.celebrateTime += dt;
       const champ = this.cars[this.celebrant];
-      for (const at of [0.45, 1.6]) if (champ && t0 < at && this.celebrateTime >= at) champ.hop((Math.floor(at) % 2 ? -1 : 1));
+      RACE.hops.forEach((at, k) => champ && t0 < at && this.celebrateTime >= at && champ.hop(k % 2 ? -1 : 1));
       if (this.celebrateTime >= RACE.celebrate) this.nextRound();
     }
     if (guest && this.state === 'racing' && this.prevState === 'countdown') this.goTimer = RACE.goShow;
@@ -419,7 +442,11 @@ export class Game {
     const champ = this.state === 'celebrate' ? this.cars[this.celebrant] : null;
     const framed = champ ? [champ] : this.cars.filter((c) => c.alive && !c.fall);
     const leader = champ ?? this.leader();
-    this.rig.update(dt, framed, leader, this.cameraYaw(framed, leader), false, champ ? RACE.closeup : null);
+    if (champ) {
+      this.rig.cinematic(dt, champ); // festejo: paneo cinematográfico alrededor del ganador
+      champ.marker.visible = false; // su nombre flotante taparía la toma (vuelve en la ronda siguiente)
+    }
+    else this.rig.update(dt, framed, leader, this.cameraYaw(framed, leader));
 
     if (this.state === 'racing' && !guest) {
       this.raceTime += dt;
@@ -582,6 +609,7 @@ export class Game {
    * Online, el anfitrión se lo manda a los invitados (salvo `local`: lo que ellos ya recrean solos).
    */
   sfx(name, { car = null, pos = car?.position, gain = 1, strength, local = false } = {}) {
+    if (this.muted) return; // precalentamiento (ver warmup)
     const x = pos ? this.rig.toNDC({ x: pos.x, y: pos.y ?? 0, z: pos.z }).x : 0;
     const pan = Number.isFinite(x) ? Math.max(-1, Math.min(1, x)) * 0.8 : 0;
     const g = gain * (car ? this.loudness(car) : 1);
@@ -628,6 +656,7 @@ export class Game {
     this.hud.setStart(this.state === 'countdown' ? Math.max(1, Math.ceil(this.countdown)) : this.goTimer > 0 ? 'go' : null);
     // Ronda en curso y cartel del ganador de la ronda (también en los invitados, con lo que manda el anfitrión)
     this.hud.setRound(this.round, this.rounds, this.tiebreak);
+    this.hud.setCinema(this.state === 'celebrate' && this.celebrant >= 0);
     if (this.state === 'celebrate') {
       const champ = this.cars[this.celebrant];
       this.hud.showRoundWinner(champ ? { name: champ.player.name, color: champ.player.color, wins: this.scores[this.celebrant], round: this.round } : null);

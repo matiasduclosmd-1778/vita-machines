@@ -66,10 +66,9 @@ export class CameraRig {
    * @param leader  auto que va primero (o null)
    * @param yawGoal hacia dónde debe mirar la cámara (heading, misma convención que los autos)
    * @param snap    saltar sin suavizado (al reiniciar)
-   * @param closeup distancia fija de cámara (festejo del ganador de la ronda) o null
    */
-  update(dt, cars, leader, yawGoal, snap = false, closeup = null) {
-    this.closeup = closeup;
+  update(dt, cars, leader, yawGoal, snap = false) {
+    this.endCinematic();
     if (snap) this.yaw = yawGoal;
     else this.yaw += wrapAngle(yawGoal - this.yaw) * (1 - Math.exp(-CAM.yawSmoothing * dt));
 
@@ -86,10 +85,10 @@ export class CameraRig {
       this.distance = this.targetDistance;
     } else {
       this.focus.lerp(this.target, 1 - Math.exp(-CAM.smoothing * dt));
-      const k = this.closeup != null ? 3.5 : this.targetDistance > this.distance ? CAM.zoomOutSmoothing : CAM.zoomInSmoothing;
+      const k = this.targetDistance > this.distance ? CAM.zoomOutSmoothing : CAM.zoomInSmoothing;
       this.distance += (this.targetDistance - this.distance) * (1 - Math.exp(-k * dt));
-      // El suavizado nunca debe dejar a alguien fuera antes de llegar al máximo (salvo en el primer plano del festejo)
-      if (this.closeup == null) this.distance = Math.max(this.distance, Math.min(this.hardDistance(cars), CAM.maxDistance));
+      // El suavizado nunca debe dejar a alguien fuera antes de llegar al máximo
+      this.distance = Math.max(this.distance, Math.min(this.hardDistance(cars), CAM.maxDistance));
     }
 
     // Detrás del foco (opuesto a forward) y elevada
@@ -98,6 +97,52 @@ export class CameraRig {
     this.camera.position.set(this.focus.x - this.fx * back, this.focus.y + D * this.sinP, this.focus.z - this.fz * back);
     this.camera.lookAt(this.focus);
     this.camera.updateMatrixWorld();
+  }
+
+  /**
+   * Festejo del ganador de la ronda: la cámara baja desde la vista de juego y orbita alrededor del
+   * auto (de atrás, por el costado, hasta el frente), terminando a su altura. Suave y con lente más
+   * cerrado. Cada pantalla lo calcula sola (también los invitados online).
+   */
+  cinematic(dt, car) {
+    const C = CAM.cinematic;
+    if (this.cine?.car !== car) {
+      this.cine = { car, t: 0, from: this.camera.position.clone(), heading: car.heading, y: car.position.y };
+    }
+    const cine = this.cine;
+    cine.t += dt;
+    const total = GAME_CONFIG.race.celebrate;
+    const smooth = (x) => x * x * (3 - 2 * x);
+    const e = smooth(clamp(cine.t / total, 0, 1)); // avance del paneo (acelera y frena suave)
+    const b = smooth(clamp(cine.t / C.blend, 0, 1)); // transición desde la cámara de juego
+    const lerp = (r) => r[0] + (r[1] - r[0]) * e;
+    // Los saltitos se siguen a medias (la cámara no tiembla)
+    cine.y += (car.position.y - cine.y) * Math.min(1, dt * 2.5);
+    const p = car.position;
+    // Mira un poco por encima del auto: el auto queda en el tercio de abajo y el cartel tiene aire arriba
+    const look = _v.set(p.x, cine.y * 0.5 + p.y * 0.5 + 1.05, p.z);
+    const angle = cine.heading + C.startAngle + C.sweep * e;
+    const d = lerp(C.distance);
+    const orbit = new THREE.Vector3(p.x + Math.sin(angle) * d, cine.y + lerp(C.height), p.z + Math.cos(angle) * d);
+    this.camera.position.lerpVectors(cine.from, orbit, b);
+    const fov = CAM.fov + (C.fov - CAM.fov) * b;
+    if (this.camera.fov !== fov) {
+      this.camera.fov = fov;
+      this.camera.updateProjectionMatrix();
+    }
+    this.camera.lookAt(look);
+    this.camera.updateMatrixWorld();
+    // Foco (sombras, efecto miniatura) en el auto
+    this.focus.copy(p);
+    this.midpoint.copy(p);
+  }
+
+  /** Vuelve de la cámara del festejo a la de juego. */
+  endCinematic() {
+    if (!this.cine) return;
+    this.cine = null;
+    this.camera.fov = CAM.fov;
+    this.camera.updateProjectionMatrix();
   }
 
   /**
@@ -134,7 +179,7 @@ export class CameraRig {
     const needU = (maxU - minU) / (2 * fit.halfX);
     const needV = (maxV - minV) / (fit.near + fit.far);
     this.requiredDistance = Math.max(needU, needV);
-    const D = this.closeup ?? clamp(this.requiredDistance, CAM.minDistance, CAM.maxDistance);
+    const D = clamp(this.requiredDistance, CAM.minDistance, CAM.maxDistance);
     this.targetDistance = D;
 
     // 2. Foco en el punto medio (centrado en la franja visible, compensando near/far)

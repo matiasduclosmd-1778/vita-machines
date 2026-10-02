@@ -4,6 +4,9 @@ import { GAME_CONFIG } from '../config.js';
 // Los valores por defecto salen de config.js, así que config.js sigue siendo la fuente de verdad.
 
 const KEY = 'vita-machines-settings-v1';
+// Versión de los ajustes guardados: al subirla, lo que cambió de valor por defecto se vuelve a aplicar
+//  2: calidad gráfica baja, sombras bajas y debug apagado por defecto (más fluido)
+const VERSION = 2;
 
 const DEFAULT_CONTROLS = GAME_CONFIG.players.map((p) => ({ ...p.controls }));
 const DRIVER_IDS = GAME_CONFIG.drivers.map((d) => d.id);
@@ -19,9 +22,10 @@ export const ACTIONS = [
 
 export function defaultSettings() {
   return {
+    version: VERSION,
     video: {
       quality: GAME_CONFIG.graphics.quality, // 'high' | 'low'
-      shadows: 'high', // 'high' | 'low' | 'off'
+      shadows: 'low', // 'high' | 'low' | 'off' (altas = mapa de 4096 px, bastante más pesado)
       renderScale: 1, // 1 | 0.75 | 0.5 (resolución interna)
       miniature: GAME_CONFIG.graphics.tiltShift.enabled,
       brightness: 50,
@@ -43,7 +47,14 @@ export function loadSettings() {
   try {
     const saved = JSON.parse(localStorage.getItem(KEY) || 'null');
     if (!saved) return base;
+    if ((saved.version ?? 1) < 2) {
+      // Ajustes de antes: pasan a los nuevos valores por defecto de gráficos y debug
+      delete saved.video?.quality;
+      delete saved.video?.shadows;
+      delete saved.game?.debug;
+    }
     return {
+      version: VERSION,
       video: { ...base.video, ...saved.video },
       game: { ...base.game, ...saved.game },
       audio: { ...base.audio, ...saved.audio },

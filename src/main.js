@@ -7,6 +7,7 @@ import { input, parsePad } from './Input.js';
 import { setPadMode } from './ui/padHints.js';
 import { loadSettings } from './ui/Settings.js';
 import { GAME_CONFIG } from './config.js';
+import { POWERUP_TYPES } from './powerups/types/index.js';
 import { loadCarModel, renderCarImage } from './world/CarModel.js';
 import { OnlineController } from './net/OnlineController.js';
 // Modelos 3D de los autos, optimizados con gltf-transform (Vite los copia al build y devuelve sus URLs)
@@ -58,6 +59,7 @@ menu.online = online;
 async function boot() {
   const started = performance.now();
   menu.showLoading('CARGANDO CALLES…');
+  warmGlyphs();
   // Los modelos de los autos se descargan (en paralelo) mientras se arma el resto
   const carModels = GAME_CONFIG.vehicle.model.enabled
     ? Promise.all(GAME_CONFIG.cars.map((spec) => loadCarModel(MODEL_URLS[`./assets/models/${spec.file}`], spec)))
@@ -117,6 +119,20 @@ async function startRace(race) {
   await wait(700);
   menu.hide();
   game.resume();
+}
+
+/**
+ * Los emojis de los objetos (🚀 💣 🛡️ ❤️…) y los símbolos del HUD se dibujan una vez, invisibles,
+ * durante la carga: la primera vez que el navegador pinta un emoji carga su fuente, y si eso pasara
+ * al juntar la primera caja, la carrera daría un tirón.
+ */
+function warmGlyphs() {
+  const el = document.createElement('div');
+  el.setAttribute('aria-hidden', 'true');
+  el.style.cssText = 'position:fixed;left:0;bottom:0;opacity:0.01;pointer-events:none;font-size:18px;z-index:-1';
+  el.textContent = [...POWERUP_TYPES.map((t) => t.icon), '★', '🎮', '🤖', '✚', '✓'].join(' ');
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 4000);
 }
 
 /** Ícono de la pestaña, dibujado como en el diseño: asfalto, monograma VM y franja de obra. */

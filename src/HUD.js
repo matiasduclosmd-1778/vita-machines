@@ -154,6 +154,11 @@ export class HUD {
   }
 
   /** Total de vueltas de la carrera (se muestra como "Vuelta 2/5"). */
+  /** Modo cine del festejo: franjas negras, sin filas ni botones (solo el cartel del ganador). */
+  setCinema(on) {
+    this.root.classList.toggle('cinema', on);
+  }
+
   /** Indicador de ronda (arriba al centro). */
   setRound(round, rounds, tiebreak = false) {
     const text = tiebreak ? 'RONDA EXTRA' : `RONDA ${round} / ${rounds}`;

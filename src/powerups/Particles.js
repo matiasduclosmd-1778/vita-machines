@@ -19,6 +19,9 @@ export class Particles {
       MAX,
     );
     this.mesh.frustumCulled = false;
+    // El buffer de colores existe desde el principio: si se creara con la primera partícula, el
+    // material cambiaría y se recompilaría en plena carrera (un tirón)
+    this.mesh.setColorAt(0, new THREE.Color('#ffffff'));
     this.mesh.count = 0;
     scene.add(this.mesh);
     this.list = [];
