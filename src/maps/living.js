@@ -11,7 +11,7 @@ const SLAB = 1.2;
 // Muebles (los usan la física y los visuales; alturas = arriba de la pista que los cruza)
 export const LIVING = {
   room: { minX: -216, maxX: 216, minZ: -176, maxZ: 176, wallHeight: 110 },
-  sofa: { x0: -72, x1: 82, z0: -156, z1: -106, seat: 14, back: 30, arm: 20, armWidth: 14, backDepth: 14 },
+  sofa: { x0: -72, x1: 82, z0: -156, z1: -106, seat: 14, back: 30, arm: 17, armWidth: 14, backDepth: 14 },
   cushions: [-36, 14, 64], // centro de cada almohadón del asiento (x)
   dining: { x: 120, z: 85, r: 62, top: 26 },
   chairs: [[120, 12, 0], [190, 115, 2.1], [72, 150, 3.6], [55, 98, 4.7]], // x, z, giro
@@ -65,10 +65,11 @@ export const LIVING_TRACK = {
   // Alturas por puntos clave [x, z, altura, 'lin' = rampa recta que lanza]
   profile: [
     [-150, 156, 0],
-    [30, 126, 0],
-    [46, 102, 14], // asiento de la silla
+    [28, 128, 0],
+    [44, 104, 15.5], // sobre el asiento de la silla
+    [56, 96, D.top + 0.2], // ya arriba de la mesa antes del borde del mantel
     [63, 90, D.top], // mesa del comedor
-    [181, 73, D.top], // borde de la mesa: empieza el tobogán del mantel
+    [184, 71, D.top], // borde del mantel: empieza el tobogán
     [195, 59, 9],
     [201, 40, 0],
     [199, -42, 0],
@@ -77,12 +78,12 @@ export const LIVING_TRACK = {
     [110, -146, LIVING.shelf.level],
     [86, -131, S.arm], // apoyabrazos derecho
     [76, -126, S.arm],
-    [44, -121, S.seat], // bajada larga y suave al almohadón 1 (si es corta, a fondo sale volando)
-    [14, -120, S.seat + 2.5], // almohadón 2
-    [-11, -121, S.seat],
-    [-36, -121, S.seat + 2.5], // almohadón 3
-    [-54, -123, S.seat],
-    [-70, -130, S.arm + 1, 'lin'], // rampa del apoyabrazos izquierdo: lanza
+    [44, -121, S.seat + 0.9], // bajada larga y suave al almohadón 1 (si es corta, a fondo sale volando)
+    [14, -120, S.seat + 3], // almohadón 2 (la pista va apoyada sobre el abultado de cada almohadón)
+    [-11, -121, S.seat + 0.9],
+    [-36, -121, S.seat + 3], // almohadón 3
+    [-54, -123, S.seat + 0.9],
+    [-70, -130, 21, 'lin'], // rampa sobre el apoyabrazos izquierdo: lanza (más alta que el apoyabrazos en todo su ancho)
     [-84, -137, 16], // aterrizaje en el ventanal (el hueco está en el medio)
     [-118, -150, 16],
     [-126, -151, 17.2, 'lin'], // rampita antes del tramo roto
@@ -91,9 +92,9 @@ export const LIVING_TRACK = {
     [-187, -118, 11],
     [-192, -84, 4],
     [-190, -54, 0],
-    [-12, 98, 0],
-    [-34, 103, C.top], // rampa a la mesita ratona
-    [-87, 108, C.top],
+    [-6, 96, 0],
+    [-28, 102, C.top + 0.3], // rampa a la mesita ratona: arriba antes del borde
+    [-87, 108, C.top + 0.3], // sigue arriba hasta el borde (de ahí se salta)
     [-96, 110, 9], // bajada después del salto de la mesita
     [-112, 113, 0],
   ],
@@ -134,7 +135,7 @@ export const LIVING_TRACK = {
     samples: 180,
     points: [[118, -149], [104, -149.5], [88, -149], [60, -149], [20, -149], [-20, -149], [-38, -148], [-46, -141], [-51, -133], [-53, -125]],
     // Al final se tira desde el borde del respaldo: es un salto al vacío hacia la rampa del apoyabrazos
-    profile: [[118, -149, LIVING.shelf.level], [103, -149.5, LIVING.shelf.level], [87, -149, S.back], [-46, -141, S.back], [-51, -133, S.seat], [-53, -125, S.seat]],
+    profile: [[118, -149, LIVING.shelf.level], [103, -149.5, LIVING.shelf.level], [87, -149, S.back], [-46, -141, S.back], [-51, -133, S.seat + 0.9], [-53, -125, S.seat + 0.9]],
   },
 
   // Obstáculos que se mueven: el autito rojo que empuja la mano del que está agachado, de un

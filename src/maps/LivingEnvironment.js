@@ -34,16 +34,13 @@ export class LivingEnvironment {
     this.time = 0;
 
     this.setupLights();
-    this.buildRoom();
-    this.buildSofa();
-    this.buildDining();
-    this.buildCoffeeTable();
-    this.buildShelf();
-    this.buildRug();
-    this.buildCube();
-    this.buildPlants();
-    this.buildLamps();
-    this.buildPeople();
+    // Cada parte queda etiquetada (userData.part): sirve para encontrar cruces con la pista
+    const parts = ['Room', 'Sofa', 'Dining', 'CoffeeTable', 'Shelf', 'Rug', 'Cube', 'Plants', 'Lamps', 'People'];
+    for (const name of parts) {
+      const before = this.group.children.length;
+      this[`build${name}`]();
+      for (const child of this.group.children.slice(before)) child.traverse((m) => (m.userData.part = name));
+    }
   }
 
   add(object, { cast = true, receive = true } = {}) {
@@ -262,13 +259,13 @@ export class LivingEnvironment {
     }
     // Almohadones del respaldo: gruesos, apenas inclinados hacia atrás
     for (const x of LIVING.cushions) {
-      const geo = pillowBox(48.5, backTop - seatTop + 1, S.backDepth - 1, 2.8, 1.2);
-      this.solid(geo, velvet, x, seatTop + (backTop - seatTop) / 2 - 0.4, S.z0 + S.backDepth / 2 + 0.3, 16, { rx: -0.06 });
+      const geo = pillowBox(48.5, backTop - seatTop - 0.2, S.backDepth - 1, 2.8, 1.2, false);
+      this.solid(geo, velvet, x, seatTop + (backTop - seatTop) / 2 - 0.25, S.z0 + S.backDepth / 2 + 0.3, 16);
     }
     // Estructura del respaldo (detrás de los almohadones) y apoyabrazos redondeados
     this.solid(roundedBox(S.x1 - S.x0 + 8, backTop - baseTop - 2, 4, 1.5), velvetDark, (S.x0 + S.x1) / 2 + 2, baseTop + (backTop - baseTop - 2) / 2, S.z0 + 2, 16);
     for (const x of [S.x0 + S.armWidth / 2 - 4, S.x1 - S.armWidth / 2 + 4]) {
-      this.solid(pillowBox(S.armWidth, armTop - baseTop + 0.6, S.z1 - S.z0 - 3, 3.2, 0.8), velvet, x, baseTop + (armTop - baseTop) / 2 - 0.3, (S.z0 + S.z1) / 2 + 1.5, 16);
+      this.solid(pillowBox(S.armWidth, armTop - baseTop - 0.2, S.z1 - S.z0 - 3, 3.2, 0.8, false), velvet, x, baseTop + (armTop - baseTop) / 2 - 0.1, (S.z0 + S.z1) / 2 + 1.5, 16);
     }
     // Almohadones decorativos de bouclé, apoyados en el respaldo
     [[22, 0.18, LM.boucle('#f1e4c8')], [-14, -0.22, LM.boucle('#e8d6b4')]].forEach(([x, rz, mat]) => {
@@ -654,7 +651,7 @@ function roundedBox(w, h, d, r) {
  * Almohadón: caja redondeada que se abulta en el centro de la cara de arriba y de adelante
  * (como un almohadón relleno).
  */
-function pillowBox(w, h, d, r, bulge) {
+function pillowBox(w, h, d, r, bulge, top = true) {
   const geo = new RoundedBoxGeometry(w, h, d, 6, Math.min(r, w / 2 - 0.1, h / 2 - 0.1, d / 2 - 0.1));
   const pos = geo.attributes.position;
   const v = new THREE.Vector3();
@@ -663,7 +660,7 @@ function pillowBox(w, h, d, r, bulge) {
     const fx = 1 - Math.pow(Math.min(1, Math.abs(v.x) / (w / 2)), 2);
     const fz = 1 - Math.pow(Math.min(1, Math.abs(v.z) / (d / 2)), 2);
     const fy = 1 - Math.pow(Math.min(1, Math.abs(v.y) / (h / 2)), 2);
-    if (v.y > 0) v.y += bulge * fx * fz;
+    if (v.y > 0 && top) v.y += bulge * fx * fz; // sin `top`, la cara de arriba queda plana (ahí apoya la pista)
     if (v.z > 0) v.z += bulge * 0.6 * fx * fy;
     pos.setXYZ(i, v.x, v.y, v.z);
   }

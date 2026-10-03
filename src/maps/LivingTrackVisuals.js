@@ -138,7 +138,7 @@ function buildLoop(L, add, mats, slab) {
   const yellow = plastic('#f2b705', 0.4);
   const y0 = L.base.y - slab;
   for (const side of [1, -1]) {
-    const lat = off0 + L.shift / 2 + side * (hw + 3.2);
+    const lat = off0 + L.shift / 2 + side * (hw + 4.6); // por fuera de la baranda de la pista
     const x = L.base.x + L.lx * lat;
     const z = L.base.z + L.lz * lat;
     const h = L.R + 2;
@@ -146,10 +146,10 @@ function buildLoop(L, add, mats, slab) {
     tower.position.set(x, y0 + h / 2, z);
     tower.rotation.y = L.heading;
     add(tower);
-    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 3.4, 12), yellow);
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 4.8, 12), yellow);
     arm.rotation.z = Math.PI / 2;
     arm.rotation.y = L.heading;
-    arm.position.set(x - L.lx * side * 1.6, L.base.y + L.R, z - L.lz * side * 1.6);
+    arm.position.set(x - L.lx * side * 2.3, L.base.y + L.R, z - L.lz * side * 2.3);
     add(arm);
   }
   const plate = new THREE.Mesh(new RoundedBoxGeometry((hw + 5) * 2, 0.8, L.R * 2.2, 2, 0.3), yellow);
@@ -158,14 +158,26 @@ function buildLoop(L, add, mats, slab) {
   add(plate, { cast: false });
 }
 
-/** Lo más alto que hay debajo de (x, z): un mueble o el piso. */
-function groundBelow(track, x, z, below) {
+/** ¿(x, z) cae sobre el mueble, con `margin` de más alrededor? */
+function insideSurface(sf, x, z, margin = 0) {
+  return sf.box
+    ? x >= sf.box[0] - margin && x <= sf.box[2] + margin && z >= sf.box[1] - margin && z <= sf.box[3] + margin
+    : (x - sf.circle[0]) ** 2 + (z - sf.circle[1]) ** 2 <= (sf.circle[2] + margin) ** 2;
+}
+
+/**
+ * Dónde apoya una columna que baja desde `bottom` en (x, z): el mueble o el piso que tiene debajo.
+ * null = no se pone: pasaría por adentro o pegada al costado de un mueble (el mantel que cae, un
+ * almohadón abultado).
+ */
+function postBase(track, x, z, bottom) {
   let h = track.floorY;
   for (const sf of track.surfaces) {
-    const inside = sf.box
-      ? x >= sf.box[0] && x <= sf.box[2] && z >= sf.box[1] && z <= sf.box[3]
-      : (x - sf.circle[0]) ** 2 + (z - sf.circle[1]) ** 2 <= sf.circle[2] ** 2;
-    if (inside && sf.top < below) h = Math.max(h, sf.top);
+    if (insideSurface(sf, x, z) && sf.top <= bottom + 0.3) h = Math.max(h, sf.top);
+  }
+  for (const sf of track.surfaces) {
+    if (sf.top > h + 1 && sf.top < bottom + 0.3 && insideSurface(sf, x, z, 4)) return null;
+    if (sf.top >= bottom + 0.3 && insideSurface(sf, x, z, 4)) return null; // el mueble llega hasta la pista
   }
   return h;
 }
@@ -184,8 +196,8 @@ function buildSupports(track, add, slab) {
         const x = p.x + Math.cos(p.heading) * off;
         const z = p.z - Math.sin(p.heading) * off;
         const bottom = p.y - slab;
-        const ground = groundBelow(track, x, z, bottom - 0.1);
-        if (bottom - ground < 2.5) continue;
+        const ground = postBase(track, x, z, bottom);
+        if (ground == null || bottom - ground < 2.5) continue;
         posts.push({ x, z, y0: ground, y1: bottom });
       }
     }
