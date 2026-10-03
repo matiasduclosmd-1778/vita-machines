@@ -31,20 +31,20 @@ kbd {
   bottom: 14px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 7px;
 }
 
 /*  [objeto] Nombre        2º · 1/5
     [      ] efectos o aviso (solo si hay) */
 .card {
   display: grid;
-  grid-template-columns: 30px minmax(0, 1fr) auto;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
   grid-template-areas: 'item name info' 'item sub sub';
   align-items: center;
-  column-gap: 9px;
-  width: 236px;
-  padding: 5px 10px 5px 6px;
-  border-radius: 11px;
+  column-gap: 11px;
+  width: 292px;
+  padding: 7px 12px 7px 8px;
+  border-radius: 13px;
   background: rgba(17, 19, 24, 0.62);
   border-left: 4px solid var(--c);
   backdrop-filter: blur(4px);
@@ -53,7 +53,7 @@ kbd {
 .card-name {
   grid-area: name;
   font-family: 'Lilita One', sans-serif;
-  font-size: 17px;
+  font-size: 21px;
   line-height: 1.1;
   color: var(--c);
   white-space: nowrap;
@@ -61,9 +61,9 @@ kbd {
   text-overflow: ellipsis;
 }
 .card-keys { display: none; }
-.card-info { grid-area: info; font-size: 12px; font-weight: 900; color: #cfd3db; font-variant-numeric: tabular-nums; }
-.card-info .place { color: #fff4dc; font-size: 14px; }
-.card-status, .effects { grid-area: sub; font-size: 11px; font-weight: 900; letter-spacing: 0.4px; line-height: 1.2; }
+.card-info { grid-area: info; font-size: 15px; font-weight: 900; color: #cfd3db; font-variant-numeric: tabular-nums; }
+.card-info .place { color: #fff4dc; font-size: 17px; }
+.card-status, .effects { grid-area: sub; font-size: 13px; font-weight: 900; letter-spacing: 0.4px; line-height: 1.2; }
 .card-status { font-family: 'Lilita One', sans-serif; font-weight: 400; color: #ff6a5c; }
 .effects { color: #9aa0ad; }
 .card-status:empty, .effects:empty { display: none; }
@@ -79,7 +79,7 @@ kbd {
 
 /* Vida: barrita debajo del nombre; la fila destella en rojo al recibir daño */
 .card { grid-template-areas: 'item name info' 'item hp hp' 'item sub sub'; }
-.hp { grid-area: hp; height: 6px; margin: 3px 0 1px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+.hp { grid-area: hp; height: 8px; margin: 4px 0 1px; border-radius: 4px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
 .hp i { display: block; height: 100%; width: calc(var(--hp, 1) * 100%); border-radius: 3px; background: #6fe36b; transition: width 0.35s ease-out, background 0.3s; }
 .hp[data-level='mid'] i { background: #ffc93c; }
 .hp[data-level='low'] i { background: #ff4d3d; }
@@ -93,16 +93,16 @@ kbd {
 /* --- Power-up del jugador: un cuadradito con el ícono ------------------- */
 .item {
   grid-area: item;
-  width: 30px;
-  height: 30px;
+  width: 40px;
+  height: 40px;
   display: grid;
   place-items: center;
-  border-radius: 8px;
+  border-radius: 10px;
   border: 2px dashed rgba(255, 255, 255, 0.14);
 }
-.item-icon { font-size: 18px; line-height: 1; }
+.item-icon { font-size: 24px; line-height: 1; }
 .item { position: relative; }
-.item-ammo { position: absolute; right: -6px; bottom: -6px; min-width: 16px; padding: 0 3px; border-radius: 6px; background: #111318; color: #ffd166; font: 900 10px/14px 'Nunito', sans-serif; text-align: center; }
+.item-ammo { position: absolute; right: -7px; bottom: -7px; min-width: 20px; padding: 0 4px; border-radius: 7px; background: #111318; color: #ffd166; font: 900 12px/17px 'Nunito', sans-serif; text-align: center; }
 .item-ammo:empty { display: none; }
 .item-name, .item-key { display: none; }
 .item[data-state='HAS_ITEM'] {
