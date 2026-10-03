@@ -80,6 +80,8 @@ async function boot() {
     online: { back: () => online.backToLobby(), leave: () => online.leave() },
   });
   game.applySettings(settings);
+  // Solo en desarrollo (npm run dev): acceso para pruebas automáticas desde la consola
+  if (import.meta.env.DEV) window.__vm = { game, menu, startRace };
   menu.setProgress(0.5);
   const models = (await carModels).filter(Boolean);
   const byId = Object.fromEntries(models.map((m) => [m.id, m]));

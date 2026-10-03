@@ -22,8 +22,8 @@ export class Environment {
     scene.add(this.group);
     this.placed = [];
 
-    scene.background = new THREE.Color(SKY_COLOR);
-    scene.fog = new THREE.Fog(SKY_COLOR, 170, 470);
+    this.background = new THREE.Color(SKY_COLOR);
+    this.fog = new THREE.Fog(SKY_COLOR, 170, 470);
     this.setupLights();
     this.buildDesk();
     this.buildFloor();
@@ -34,7 +34,7 @@ export class Environment {
   setupLights() {
     // Luz de tarde: sol cálido y bajo (sombras largas) + relleno frío del cielo
     // El mapa de entorno ya aporta luz ambiente: el hemisférico queda como relleno suave
-    this.scene.add(new THREE.HemisphereLight('#cfe0ff', '#b98d62', 0.55));
+    this.group.add(new THREE.HemisphereLight('#cfe0ff', '#b98d62', 0.55));
     const sun = new THREE.DirectionalLight('#ffd6a0', 3.2);
     sun.castShadow = true;
     sun.shadow.mapSize.set(4096, 4096);
@@ -48,10 +48,10 @@ export class Environment {
     sun.shadow.normalBias = 0.04;
     this.sunOffset = new THREE.Vector3(-80, 95, 55);
     this.sun = sun;
-    this.scene.add(sun, sun.target);
+    this.group.add(sun, sun.target);
     const fill = new THREE.DirectionalLight('#9fc2ff', 0.45);
     fill.position.set(60, 40, -80);
-    this.scene.add(fill);
+    this.group.add(fill);
   }
 
   /**
@@ -88,9 +88,19 @@ export class Environment {
     panel(50, 34, '#fff0d8', 2.6, this.sunOffset);
     panel(60, 20, '#cfe2ff', 1.6, new THREE.Vector3(70, 35, -60));
     const pmrem = new THREE.PMREMGenerator(renderer);
-    this.scene.environment = pmrem.fromScene(env, 0.03).texture;
-    this.scene.environmentIntensity = GFX.envIntensity;
+    this.envMap = pmrem.fromScene(env, 0.03).texture;
     pmrem.dispose();
+    this.setActive(true);
+  }
+
+  /** Mapa en juego: muestra su mundo y pone su cielo, niebla y entorno (o lo oculta). */
+  setActive(on) {
+    this.group.visible = on;
+    if (!on) return;
+    this.scene.background = this.background;
+    this.scene.fog = this.fog;
+    this.scene.environment = this.envMap ?? null;
+    this.scene.environmentIntensity = GFX.envIntensity;
   }
 
   /** La sombra sigue a la cámara para tener buena resolución donde se juega. */

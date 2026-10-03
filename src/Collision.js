@@ -14,9 +14,9 @@ export function resolveCarTrack(car, track) {
   if (car.fall) return;
   let impact = 0;
   for (const path of track.paths) {
-    const hw = path.halfWidth;
     for (const c of car.circles) {
       path.project(c.x, c.z, info);
+      const hw = path.hw[info.i]; // medio ancho de ese tramo (hay tramos angostos)
       const limit = hw - c.r;
       if (info.dist <= limit || info.dist > hw + 2.5) continue;
       const walls = info.offset > 0 ? path.wallLeft : path.wallRight;

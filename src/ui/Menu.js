@@ -1,5 +1,6 @@
 import './menu.css';
 import { GAME_CONFIG, POWERUP_CONFIG } from '../config.js';
+import { MAPS } from '../maps/index.js';
 import { ACTIONS, RESERVED_KEYS, defaultSettings, keyLabel, localPlayerName, saveSettings } from './Settings.js';
 import { OnlineScreens } from './OnlineScreens.js';
 import { input, parsePad, MAX_PADS } from '../Input.js';
@@ -391,7 +392,8 @@ export class Menu {
     const mapThumb = this.thumbs.map ? `background-image:url(${this.thumbs.map})` : 'background:#333';
     const art = (size, pos) => `background-image:url(/ui/street.jpg);background-size:${size};background-position:${pos}`;
     const maps = [
-      { id: 'desk', name: 'El Escritorio', style: mapThumb, ready: true },
+      { id: 'desk', name: MAPS.desk.name, style: mapThumb, ready: true },
+      { id: 'living', name: MAPS.living.name, style: `background-image:url(${MAPS.living.thumb});background-size:cover;background-position:50% 55%`, ready: true },
       { id: 'avenue', name: 'Avenida Rota', style: art('160% auto', '50% 62%'), ready: false },
       { id: 'brick', name: 'Barrio Ladrillo', style: art('260% auto', '4% 40%'), ready: false },
     ];
@@ -416,9 +418,9 @@ export class Menu {
             </div>
             <div style="display:flex;flex-direction:column;gap:14px">
               <div class="vm-label">MAPA</div>
-              <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px">
+              <div style="display:grid;grid-template-columns:repeat(${maps.length},minmax(0,1fr));gap:20px">
                 ${maps.map((m) => `
-                  <button class="vm-map ${r.map === m.id ? 'selected' : ''}" ${m.ready ? '' : 'disabled'}>
+                  <button class="vm-map ${r.map === m.id ? 'selected' : ''}" ${m.ready ? `data-map="${m.id}"` : 'disabled'}>
                     ${m.ready ? '' : '<span class="vm-soon">PRÓXIMAMENTE</span>'}
                     <div class="thumb" style="${m.style}"></div>
                     <div class="name">${m.name}</div>
@@ -466,7 +468,7 @@ export class Menu {
               <div class="vm-muted" style="font-weight:800;font-size:22px">Resumen de la partida</div>
             </div>
             <div style="display:flex;flex-direction:column;font-weight:800;font-size:24px">
-              ${[['Modo', 'Carrera', ''], ['Mapa', 'El Escritorio', ''], ['Corredores', rivalText(r), 'data-summary-rival'], ['Rondas', r.rounds, 'data-summary-rounds'], ['Power-ups', powerupsText(r), 'data-summary-pu']].map(([k, v, attr]) => `
+              ${[['Modo', 'Carrera', ''], ['Mapa', MAPS[r.map]?.name ?? MAPS.desk.name, 'data-summary-map'], ['Corredores', rivalText(r), 'data-summary-rival'], ['Rondas', r.rounds, 'data-summary-rounds'], ['Power-ups', powerupsText(r), 'data-summary-pu']].map(([k, v, attr]) => `
                 <div style="display:flex;justify-content:space-between;padding:14px 0;border-bottom:2px solid var(--vm-line)">
                   <span class="vm-muted">${k}</span><span ${attr}>${v}</span>
                 </div>`).join('')}
@@ -479,9 +481,21 @@ export class Menu {
       onMount: (el) => {
         const name = el.querySelector('[data-name]');
         name.addEventListener('input', () => {
-          r.name = name.value.trim() || 'Carrera en el escritorio';
+          r.name = name.value.trim() || MAPS[r.map].raceName;
           el.querySelector('[data-summary-name]').textContent = r.name;
         });
+        // Mapa: si la partida tenía el nombre por defecto, toma el del mapa nuevo
+        el.querySelectorAll('[data-map]').forEach((b) => b.addEventListener('click', () => {
+          const wasDefault = Object.values(MAPS).some((m) => m.raceName === r.name);
+          r.map = b.dataset.map;
+          el.querySelectorAll('[data-map]').forEach((x) => x.classList.toggle('selected', x === b));
+          el.querySelector('[data-summary-map]').textContent = MAPS[r.map].name;
+          if (wasDefault) {
+            r.name = MAPS[r.map].raceName;
+            name.value = r.name;
+            el.querySelector('[data-summary-name]').textContent = r.name;
+          }
+        }));
         el.querySelectorAll('[data-powerups] button').forEach((b) => b.addEventListener('click', () => {
           r.powerups = b.dataset.v;
           el.querySelectorAll('[data-powerups] button').forEach((x) => x.classList.toggle('on', x === b));

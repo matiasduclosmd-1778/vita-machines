@@ -86,6 +86,8 @@ export class Car {
     this.yawRate = 0;
     this.spin = 0; // giro extra provocado por golpes
     this.spinOut = 0; // segundos que le quedan de trompo sin control (vehículos frágiles)
+    this.loop = null; // en el loop guiado: { angle, v0, v, offset } (ver track/Loop.js)
+    this.netLoop = -1; // invitado online: ángulo del loop que manda el anfitrión (-1 = no está en el loop)
     this.jumpCooldown = 0;
     this.twirl = null; // vuelta del festejo (ver hop)
     this.sounds = []; // sonidos pendientes (choques, saltos…): los reproduce Game cada cuadro
@@ -310,9 +312,15 @@ export class Car {
   syncMesh(dt) {
     this.mesh.position.copy(this.position);
     // Cabeceo según la trayectoria: sube la trompa en rampas, la baja al caer
-    const horiz = Math.max(4, Math.abs(this.forwardSpeed));
-    const targetSlope = -Math.atan(this.vy / horiz) * Math.sign(this.forwardSpeed || 1);
-    this.slope += (clamp(targetSlope, -0.6, 0.6) - this.slope) * (1 - Math.exp(-12 * dt));
+    const loopAngle = this.loop ? this.loop.angle : this.netLoop;
+    if (loopAngle >= 0) {
+      this.slope = -loopAngle; // en el loop: da la vuelta entera (boca abajo arriba)
+    } else {
+      this.slope = Math.atan2(Math.sin(this.slope), Math.cos(this.slope)); // al salir del loop no "desenrosca"
+      const horiz = Math.max(4, Math.abs(this.forwardSpeed));
+      const targetSlope = -Math.atan(this.vy / horiz) * Math.sign(this.forwardSpeed || 1);
+      this.slope += (clamp(targetSlope, -0.6, 0.6) - this.slope) * (1 - Math.exp(-12 * dt));
+    }
     // Vuelta del festejo (en el invitado llega el ángulo del anfitrión: netTwirl)
     const tw = this.twirl;
     if (tw) {

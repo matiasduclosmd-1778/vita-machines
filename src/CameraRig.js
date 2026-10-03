@@ -262,9 +262,20 @@ export class CameraRig {
     const vu = toU(this.vel.x, this.vel.z);
     const vv = toV(this.vel.x, this.vel.z);
     this.midpoint.set(0, 0, 0);
+    // Un auto más alto que el foco se ve más arriba en pantalla: cuenta como si estuviera más
+    // adelante en el piso (en una mesa o un sillón, si no, se saldría por arriba sin que la cámara lo vea)
+    let midY = 0;
+    let mu = 0;
+    let mv = 0;
+    for (const c of cars) {
+      midY += c.position.y / cars.length;
+      mu += toU(c.position.x, c.position.z) / cars.length;
+      mv += toV(c.position.x, c.position.z) / cars.length;
+    }
+    const lift = (c) => this.lift(-(toV(c.position.x, c.position.z) - mv), c.position.y - midY, this.distance);
     for (const c of cars) {
       const u = toU(c.position.x, c.position.z);
-      const v = toV(c.position.x, c.position.z);
+      const v = toV(c.position.x, c.position.z) - lift(c);
       minU = Math.min(minU, u - pad);
       maxU = Math.max(maxU, u + pad);
       minV = Math.min(minV, v - pad);
@@ -298,7 +309,7 @@ export class CameraRig {
         maxV,
         lim,
         lu: leader ? toU(leader.position.x, leader.position.z) : 0,
-        lv: leader ? toV(leader.position.x, leader.position.z) : 0,
+        lv: leader ? toV(leader.position.x, leader.position.z) - lift(leader) : 0,
       };
       toWorld(this.target, tu, tv, this.midpoint.y);
       return;
@@ -310,7 +321,7 @@ export class CameraRig {
     if (leader) {
       const lim = this.extents(safe.x * CAM.leaderFraming, safe.y * CAM.leaderFraming);
       const lu = toU(leader.position.x, leader.position.z);
-      const lv = toV(leader.position.x, leader.position.z);
+      const lv = toV(leader.position.x, leader.position.z) - lift(leader);
       tu = clamp(tu, lu - lim.halfX * D, lu + lim.halfX * D);
       tv = clamp(tv, lv - lim.near * D, lv + lim.far * D);
     }
@@ -354,15 +365,33 @@ export class CameraRig {
   hardDistance(cars) {
     const safe = safeZoneNDC();
     const e = this.extents(safe.x * CAM.hardFraming, safe.y * CAM.hardFraming);
-    let D = 0;
-    for (const c of cars) {
-      const dx = c.position.x - this.focus.x;
-      const dz = c.position.z - this.focus.z;
-      const u = dx * this.rx + dz * this.rz;
-      const v = -(dx * this.fx + dz * this.fz); // v < 0 = adelante (arriba en pantalla)
-      D = Math.max(D, Math.abs(u) / e.halfX, v < 0 ? -v / e.far : v / e.near);
+    // La altura de un auto depende de la distancia de la cámara (ver lift): dos pasadas alcanzan
+    let D = this.distance;
+    for (let pass = 0; pass < 2; pass++) {
+      const est = Math.max(D, this.minDistance);
+      D = 0;
+      for (const c of cars) {
+        const dx = c.position.x - this.focus.x;
+        const dz = c.position.z - this.focus.z;
+        const u = dx * this.rx + dz * this.rz;
+        const v0 = -(dx * this.fx + dz * this.fz); // v < 0 = adelante (arriba en pantalla)
+        const v = v0 - this.lift(-v0, c.position.y - this.focus.y, est);
+        D = Math.max(D, Math.abs(u) / e.halfX, v < 0 ? -v / e.far : v / e.near);
+      }
     }
     return D;
+  }
+
+  /**
+   * Un punto a `dy` de altura sobre el foco y `a` unidades por delante (sobre el piso) se ve en
+   * pantalla donde se vería un punto del piso a a + lift: cuánto "más adelante" cuenta por estar
+   * alto (en una mesa o un sillón). Proyección exacta con la cámara a distancia D.
+   */
+  lift(a, dy, D) {
+    const H = D * this.sinP; // altura de la cámara sobre el foco
+    const B = D * this.cosP; // distancia horizontal de la cámara al foco
+    const k = H / Math.max(H * 0.2, H - dy); // si el punto llegara a la altura de la cámara, se acota
+    return (B + a) * k - B - a;
   }
 
   /** Posición en pantalla normalizada (-1..1) de un punto del mundo. */
@@ -371,10 +400,10 @@ export class CameraRig {
     return { x: _v.x, y: _v.y, behind: _v.z > 1 };
   }
 
-  /** ¿Está el punto dentro de la zona segura? */
-  isInSafeZone(pos) {
+  /** ¿Está el punto dentro de la zona segura? top: false = salir por arriba no cuenta. */
+  isInSafeZone(pos, { top = true } = {}) {
     const p = this.toNDC(pos);
     const safe = safeZoneNDC();
-    return !p.behind && Math.abs(p.x) <= safe.x && Math.abs(p.y) <= safe.y;
+    return !p.behind && Math.abs(p.x) <= safe.x && p.y >= -safe.y && (!top || p.y <= safe.y);
   }
 }

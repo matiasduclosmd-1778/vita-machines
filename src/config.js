@@ -293,7 +293,7 @@ export const GAME_CONFIG = {
     yawSmoothing: 1.4, // giro de la cámara siguiendo la pista (1/s)
     yawLookAhead: 24, // tramo de pista delante del líder que orienta la cámara…
     yawLookAheadTime: 0.6, // …más lo que recorre el líder en este tiempo (s): a más velocidad, anticipa antes las curvas
-    heightSmoothing: 1.2, // altura del foco (saltos y desniveles): más lenta que el paneo, así no rebota (1/s)
+    heightSmoothing: 2, // altura del foco (saltos y desniveles): más lenta que el paneo, así no rebota (1/s)
     velocitySmoothing: 4, // velocidad usada para anticipar el encuadre: los choques no lo sacuden (1/s)
   },
 

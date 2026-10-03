@@ -1,4 +1,5 @@
 import { GAME_CONFIG, POWERUP_CONFIG } from '../config.js';
+import { MAPS } from '../maps/index.js';
 import { keyLabel } from './Settings.js';
 import { parsePad } from '../Input.js';
 import { audio } from '../audio/index.js';
@@ -157,7 +158,7 @@ export const OnlineScreens = {
 
   showCreateLobby() {
     const name = this.settings.profile.name;
-    const o = (this.lobbyOptions ??= { name: `Lobby de ${name}`, isPublic: true, rounds: GAME_CONFIG.race.rounds, powerups: 'normal' });
+    const o = (this.lobbyOptions ??= { name: `Lobby de ${name}`, isPublic: true, rounds: GAME_CONFIG.race.rounds, powerups: 'normal', map: 'desk' });
     const seg = (key, options) => Object.entries(options).map(([v, label]) => `<button class="${String(o[key]) === v ? 'on' : ''}" data-v="${v}">${label}</button>`).join('');
     this.render(`
       <div class="vm-screen">
@@ -178,9 +179,15 @@ export const OnlineScreens = {
                 <div class="vm-seg" style="grid-template-columns:repeat(${ROUND_OPTIONS.length},1fr)" data-key="rounds">${seg('rounds', Object.fromEntries(ROUND_OPTIONS.map((n) => [n, n])))}</div>
               </div>
             </div>
-            <div style="display:flex;flex-direction:column;gap:14px">
-              <div class="vm-label">POWER-UPS</div>
-              <div class="vm-seg" style="grid-template-columns:repeat(4,1fr)" data-key="powerups">${seg('powerups', POWERUP_AMOUNTS)}</div>
+            <div style="display:grid;grid-template-columns:1fr 1.6fr;gap:28px">
+              <div style="display:flex;flex-direction:column;gap:14px">
+                <div class="vm-label">MAPA</div>
+                <div class="vm-seg" style="grid-template-columns:repeat(${Object.keys(MAPS).length},1fr)" data-key="map">${seg('map', Object.fromEntries(Object.values(MAPS).map((m) => [m.id, m.name])))}</div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:14px">
+                <div class="vm-label">POWER-UPS</div>
+                <div class="vm-seg" style="grid-template-columns:repeat(4,1fr)" data-key="powerups">${seg('powerups', POWERUP_AMOUNTS)}</div>
+              </div>
             </div>
             <div class="vm-muted" style="font-weight:800;font-size:20px">Público: aparece en la lista de lobbies. Privado: solo se entra con el código.</div>
             <button class="vm-btn yellow hero center" data-create>CREAR LOBBY</button>
@@ -247,7 +254,7 @@ export const OnlineScreens = {
           <div class="vm-panel" style="padding:30px;display:flex;flex-direction:column;gap:22px">
             <div class="vm-panel-title" style="margin:0">Partida</div>
             <div style="display:flex;flex-direction:column;font-weight:800;font-size:24px">
-              ${[['Modo', 'Carrera'], ['Mapa', 'El Escritorio'], ['Rondas', st.rounds], ['Power-ups', powerupsText(st.powerups)], ['Máximo', `${st.max} jugadores`]].map(([k, v]) => `
+              ${[['Modo', 'Carrera'], ['Mapa', (MAPS[st.map] ?? MAPS.desk).name], ['Rondas', st.rounds], ['Power-ups', powerupsText(st.powerups)], ['Máximo', `${st.max} jugadores`]].map(([k, v]) => `
                 <div style="display:flex;justify-content:space-between;padding:14px 0;border-bottom:2px solid var(--vm-line)">
                   <span class="vm-muted">${k}</span><span>${v}</span>
                 </div>`).join('')}

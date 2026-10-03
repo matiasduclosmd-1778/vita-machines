@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GAME_CONFIG } from './config.js';
 import { input, isUse, isJump, isAnyPadUse, isAnyPadJump, parsePad } from './Input.js';
 import { Track } from './track/Track.js';
-import { Environment } from './world/Environment.js';
+import { MAPS, DEFAULT_MAP } from './maps/index.js';
 import { PostFX } from './world/PostFX.js';
 import { Terrain } from './Terrain.js';
 import { Car, PlayerState } from './Car.js';
@@ -38,10 +38,8 @@ export class Game {
     container.appendChild(this.renderer.domElement);
 
     this.scene = new THREE.Scene();
-    this.track = new Track(this.scene);
-    this.environment = new Environment(this.scene, this.track);
-    this.environment.buildEnvMap(this.renderer);
-    this.terrain = new Terrain(this.track);
+    this.worlds = {}; // mapas ya armados: { id → { track, environment } }
+    this.setMap(DEFAULT_MAP);
     this.rig = new CameraRig(window.innerWidth / window.innerHeight);
     this.input = input;
     this.rounds = RACE.rounds;
@@ -159,6 +157,7 @@ export class Game {
    * race: { rounds, powerups, players: [{ driver }] }
    */
   startOnlineRace(net, race) {
+    this.setMap(race.map ?? DEFAULT_MAP);
     this.net = net;
     this.rounds = race.rounds ?? RACE.rounds;
     this.hud.setResultMode(net.isHost ? 'host' : 'guest');
@@ -182,10 +181,11 @@ export class Game {
    * Arranca una carrera nueva con las opciones elegidas en "Crear partida".
    * humans: personas (jugadores 1…humans) · cpus: pilotos de la computadora (los autos que siguen)
    * drivers: id del piloto de cada auto (GAME_CONFIG.drivers)
-   * rounds: rondas de la partida · powerups: 'off' | 'few' | 'normal' | 'many'
+   * rounds: rondas de la partida · powerups: 'off' | 'few' | 'normal' | 'many' · map: id del mapa (src/maps/)
    */
-  startRace({ powerups = 'normal', humans = 1, cpus = 1, difficulty = 'normal', drivers = [], rounds = RACE.rounds } = {}) {
+  startRace({ map = DEFAULT_MAP, powerups = 'normal', humans = 1, cpus = 1, difficulty = 'normal', drivers = [], rounds = RACE.rounds } = {}) {
     if (this.net) this.endOnline();
+    this.setMap(map);
     this.setupPlayers(this.localPlayers(humans + cpus));
     this.rounds = rounds;
     this.powerups.setAmount(powerups);
@@ -270,6 +270,51 @@ export class Game {
     this.hudRoot.classList.toggle('hidden', !on);
   }
 
+  /**
+   * Mapa en juego (ver src/maps/). La primera vez arma su pista y su ambiente; después solo
+   * muestra el mundo de ese mapa y oculta los demás.
+   */
+  setMap(id) {
+    const map = MAPS[id] ?? MAPS[DEFAULT_MAP];
+    if (this.map === map) return;
+    for (const w of Object.values(this.worlds)) w.setActive(false);
+    let world = this.worlds[map.id];
+    if (!world) {
+      const track = new Track(this.scene, map.track, map.visuals);
+      const environment = new map.Environment(this.scene, track);
+      environment.buildEnvMap(this.renderer);
+      world = this.worlds[map.id] = {
+        track,
+        environment,
+        setActive(on) {
+          track.group.visible = on;
+          environment.setActive(on);
+        },
+      };
+    }
+    world.setActive(true);
+    this.map = map;
+    this.track = world.track;
+    this.environment = world.environment;
+    this.terrain = new Terrain(world.track);
+    this.powerups?.setTrack(world.track, map.boxes);
+    if (this.video) this.applyShadows(this.video);
+    // Shaders del mapa nuevo compilados ahora (en la pantalla de carga), no en plena carrera
+    if (this.rig) this.renderer.compile(this.scene, this.rig.camera);
+  }
+
+  /** Sombras del sol del mapa en juego según los ajustes de video. */
+  applyShadows(v) {
+    const sun = this.environment.sun;
+    sun.castShadow = v.shadows !== 'off';
+    const size = v.shadows === 'high' ? 4096 : 2048;
+    if (sun.shadow.mapSize.x !== size) {
+      sun.shadow.mapSize.set(size, size);
+      sun.shadow.map?.dispose();
+      sun.shadow.map = null;
+    }
+  }
+
   /** Aplica los ajustes del menú (gráficos, juego y teclas). */
   applySettings(settings) {
     const G = GAME_CONFIG.graphics;
@@ -280,14 +325,8 @@ export class Game {
     this.postfx.quality = v.quality;
     this.postfx.build();
 
-    const sun = this.environment.sun;
-    sun.castShadow = v.shadows !== 'off';
-    const size = v.shadows === 'high' ? 4096 : 2048;
-    if (sun.shadow.mapSize.x !== size) {
-      sun.shadow.mapSize.set(size, size);
-      sun.shadow.map?.dispose();
-      sun.shadow.map = null;
-    }
+    this.video = v;
+    this.applyShadows(v);
 
     this.rig.setView(settings.game.camera);
 
@@ -461,6 +500,9 @@ export class Game {
 
     for (const car of this.cars) car.scaleMarker(this.rig.camera.position);
     this.environment.follow(this.rig.focus);
+    this.worldTime = (this.worldTime ?? 0) + dt;
+    this.track.updateMovers?.(this.worldTime); // obstáculos que se mueven (el autito del living)
+    this.environment.update?.(this.rig.camera, dt); // living: paredes entre la cámara y la pista, personas
     this.updateHUD();
     this.debug.update(this.cars, this.rig, this.tracker, this.powerups);
     // El efecto miniatura mantiene nítida la franja de pantalla donde están los jugadores
@@ -494,21 +536,29 @@ export class Game {
   }
 
   fixedUpdate(dt) {
+    const loop = this.track.loop; // loop guiado (El Living): mientras un auto está en el aro, lo mueve el loop
     this.cars.forEach((car, i) => {
       const input = this.inputFor(i);
-      car.step(dt, input);
+      if (!car.loop) car.step(dt, input);
       // Arma: mantener "usar objeto" dispara en automático
       this.powerups.trigger(car, this.state === 'racing' && !!input.fire, dt);
     });
     for (let i = 0; i < this.cars.length; i++) {
-      for (let j = i + 1; j < this.cars.length; j++) resolveCarCar(this.cars[i], this.cars[j]);
+      for (let j = i + 1; j < this.cars.length; j++) if (!this.cars[i].loop && !this.cars[j].loop) resolveCarCar(this.cars[i], this.cars[j]);
     }
     for (const car of this.cars) {
+      if (car.loop) continue;
       resolveCarObstacles(car, this.track.obstacles);
       resolveCarTrack(car, this.track);
     }
     this.terrain.fixedUpdate(dt, this.cars);
-    for (const car of this.cars) if (!car.fall) this.track.updateProgress(car);
+    for (const car of this.cars) if (car.loop) loop.step(car, dt);
+    for (const car of this.cars) {
+      if (car.fall || car.loop) continue;
+      const prevS = car.trackS;
+      this.track.updateProgress(car);
+      loop?.check(car, prevS);
+    }
     this.powerups.fixedUpdate(dt);
   }
 

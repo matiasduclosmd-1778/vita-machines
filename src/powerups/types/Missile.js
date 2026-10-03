@@ -124,7 +124,7 @@ class MissileProjectile {
     if (g.onTrack) return g;
     for (const path of this.ctx.track.paths) {
       const info = path.project(this.pos.x, this.pos.z);
-      if (info.dist <= path.halfWidth + 0.5) return { path, s: info.s, offset: info.offset, h: path.heightAt(info.s), gap: true };
+      if (info.dist <= path.hw[info.i] + 0.5) return { path, s: info.s, offset: info.offset, h: path.heightAt(info.s), gap: true };
     }
     return null;
   }

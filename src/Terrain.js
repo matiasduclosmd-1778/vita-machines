@@ -21,6 +21,7 @@ export class Terrain {
   }
 
   step(car, dt, cars) {
+    if (car.loop) return; // en el loop guiado manda el loop (ver track/Loop.js)
     const p = car.position;
 
     if (car.fall) {
@@ -86,7 +87,7 @@ export class Terrain {
     // Último punto seguro: apoyado en el camino principal, en zona apta y lejos del borde
     if (car.grounded && g.onTrack && g.path === this.track.path) {
       const P = g.path;
-      if (P.respawnable[g.i] && Math.abs(g.offset) < P.halfWidth - 2) car.safeS = g.s;
+      if (P.respawnable[g.i] && Math.abs(g.offset) < P.hw[g.i] - 2) car.safeS = g.s;
     }
   }
 

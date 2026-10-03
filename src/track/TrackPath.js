@@ -2,7 +2,8 @@ import * as THREE from 'three';
 
 /**
  * Camino muestreado como polilínea (cerrada = circuito, abierta = atajo).
- * Además de la geometría 2D guarda, por muestra: altura, paredes por lado y huecos (sin piso).
+ * Además de la geometría 2D guarda, por muestra: altura, medio ancho, paredes por lado y huecos (sin piso).
+ * `halfWidth` es el medio ancho máximo; el de cada muestra está en `hw` (tramos angostos).
  */
 export class TrackPath {
   /**
@@ -54,6 +55,12 @@ export class TrackPath {
     this.wallRight = new Uint8Array(n).fill(1);
     this.gap = new Uint8Array(n);
     this.respawnable = new Uint8Array(n).fill(1);
+    this.hw = new Float32Array(n).fill(halfWidth);
+  }
+
+  /** Medio ancho en la muestra i. */
+  halfWidthAt(i) {
+    return this.hw[i];
   }
 
   get count() {

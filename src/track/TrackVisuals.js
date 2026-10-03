@@ -192,7 +192,7 @@ export function buildTrackVisuals(track, scene) {
 // ======================================================================= helpers de geometría
 
 /** Punto sobre el borde: desplazado `offset` a la izquierda de la línea central, a altura y. */
-function edge(path, i, offset, y) {
+export function edge(path, i, offset, y) {
   const p = path.points[i];
   const n = path.normals[i];
   return { x: p.x + n.x * offset, y, z: p.z + n.z * offset };
@@ -202,7 +202,7 @@ function edge(path, i, offset, y) {
  * Tramos contiguos de muestras que cumplen pred. Cada tramo es una lista de índices;
  * en circuitos cerrados completos, el último repite el primero para cerrar el anillo.
  */
-function runs(path, pred) {
+export function runs(path, pred) {
   const n = path.count;
   const segOk = (i) => pred(i % n) && pred((i + 1) % n) && (path.closed || i + 1 < n);
   const result = [];
@@ -232,7 +232,7 @@ function runs(path, pred) {
  * Franja entre dos bordes a lo largo de un tramo.
  * uv(i, s, isB) → [u, v]; flip invierte la orientación de las caras.
  */
-function strip(path, run, edgeA, edgeB, uv, flip = false) {
+export function strip(path, run, edgeA, edgeB, uv, flip = false) {
   const pos = [];
   const uvs = [];
   const idx = [];
@@ -261,7 +261,7 @@ function strip(path, run, edgeA, edgeB, uv, flip = false) {
   return geo;
 }
 
-function quad(a, b, c, d, uvA, uvC) {
+export function quad(a, b, c, d, uvA, uvC) {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute([a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, d.x, d.y, d.z], 3));
   geo.setAttribute('uv', new THREE.Float32BufferAttribute([uvA[0], uvA[1], uvC[0], uvA[1], uvC[0], uvC[1], uvA[0], uvC[1]], 2));

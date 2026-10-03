@@ -57,10 +57,9 @@ export class AIDriver {
     const project = (x, z) => P.project(x, z);
     this.obstacles = this.track.obstacles.map((o) => {
       const q = project(o.x, o.z);
-      return { s: q.s, offset: q.offset, r: o.r };
+      return { s: q.s, offset: q.offset, r: o.r, ref: o.moving ? o : null }; // los que se mueven se siguen en vivo
     });
-    const J = this.track.jumpInfo;
-    this.takeoffS = J.s0 + J.dJump;
+    this.takeoffs = this.track.takeoffs ?? []; // despegues de los saltos (donde hay que llegar rápido)
   }
 
   /** Velocidad máxima para tomar una curva de radio R con el giro del auto. */
@@ -95,9 +94,8 @@ export class AIDriver {
       if (this.risky[i]) vc /= cfg.riskMargin;
       target = Math.min(target, Math.sqrt(vc * vc + 2 * decel * d));
     }
-    // Rampa de salto: hay que llegar rápido o no se alcanza la plataforma
-    const toTakeoff = P.forward(s, this.takeoffS);
-    if (toTakeoff < 35) target = Math.max(target, 27);
+    // Rampa de salto: hay que llegar rápido o no se alcanza el otro lado
+    if (this.takeoffs.some((t) => P.forward(s, t) < 35)) target = Math.max(target, 27);
 
     // 2. Línea: esquivar obstáculos y, si conviene, pasar por una caja
     let wanted = 0;
@@ -118,10 +116,11 @@ export class AIDriver {
       const d = P.forward(s, o.s);
       if (d < 0 || d > 30) continue;
       const gap = o.r + 2.4;
-      if (Math.abs(wanted - o.offset) < gap) wanted = o.offset > 0 ? o.offset - gap : o.offset + gap;
+      const off = o.ref ? o.ref.offset : o.offset;
+      if (Math.abs(wanted - off) < gap) wanted = off > 0 ? off - gap : off + gap;
     }
     const i0 = P.indexAt(s);
-    const limit = this.risky[i0] ? 2 : P.halfWidth - 2; // sin baranda: cerca del centro
+    const limit = this.risky[i0] ? Math.min(2, P.hw[i0] - 1.5) : P.hw[i0] - 2; // sin baranda: cerca del centro
     wanted = clamp(wanted, -limit, limit);
     this.offset += (wanted - this.offset) * Math.min(1, 3 * dt);
 
@@ -212,7 +211,7 @@ export class AIDriver {
         return ahead > 0.8 && dist < 14 && sameLevel;
       case 'TURBO': {
         // En recta y sin bordes peligrosos cerca (o para el salto)
-        if (P.forward(s, this.takeoffS) < 45) return true;
+        if (this.takeoffs.some((t) => P.forward(s, t) < 45)) return true;
         for (let d = 0; d <= 50; d += 5) {
           const i = P.indexAt(s + d);
           if (this.radius[i] < 30 || this.risky[i]) return false;

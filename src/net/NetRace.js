@@ -108,6 +108,7 @@ export class HostSync {
         pu.effects.list(car).map((e) => [e.id, r2(e.remaining), e.netExtra?.()]),
         r2(car.twirl?.angle ?? 0), // vuelta del festejo
         pu.inventory(car).ammo, // balas del arma
+        car.loop ? r3(car.loop.angle) : -1, // ángulo en el loop guiado
       ]),
       b: pu.boxes.map((b) => (b.active ? 1 : 0)).join(''),
       e: pu.entities.filter((e) => e.netKind).map((e) => [e.netId, e.netKind, ...e.netState().map(r3)]),
@@ -214,6 +215,7 @@ export class GuestSync {
       car.health = q[12];
       car.netTwirl = q[15] || 0;
       g.powerups.inventory(car).ammo = q[16] ?? 0;
+      car.netLoop = q[17] >= 0 && p[17] >= 0 && q[17] > p[17] ? lerp(17) : q[17] ?? -1;
       if (!(flags & ALIVE)) {
         if (car.alive) car.eliminate();
       } else car.state = flags & OUT ? PlayerState.OUT_OF_SCREEN : PlayerState.NORMAL;

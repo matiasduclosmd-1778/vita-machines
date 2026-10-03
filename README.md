@@ -14,7 +14,7 @@ npm run dev
 Basados en `CDesign/VitaMachines HUB.html`. Flujo local: **Carga → (nombre) → Inicio → Crear partida → Elegí tu piloto → carrera**. Online: ver [Online](#online).
 
 - **Nombre**: obligatorio la primera vez que se entra; se cambia desde el inicio («✎ Cambiar nombre»).
-- **Crear partida**: nombre, modo Carrera, mapa El Escritorio, rival, vueltas (5, 8 o 10) y power-ups (No, Pocos, Medios o Muchos).
+- **Crear partida**: nombre, modo Carrera, mapa (El Escritorio o El Living), rival, vueltas (5, 8 o 10) y power-ups (No, Pocos, Medios o Muchos).
 - **Elegí tu piloto**: cada jugador elige con sus teclas de girar y confirma con la de usar objeto (o con el mouse, el jugador 1); `ESC` deshace la confirmación. Con los dos listos, el jugador 1 arranca. Si eligen el mismo piloto, el auto del jugador 2 sale con su color. Los otros modos y mapas figuran como *próximamente*.
   - **VS CPU**: un jugador (WASD + Espacio) contra la computadora, en Fácil / Normal / Difícil. La CPU elige un piloto al azar distinto del tuyo.
   - **VS Local**: dos jugadores en el mismo teclado.
@@ -147,6 +147,15 @@ Todo el audio se sintetiza en vivo con Web Audio (sin archivos), en `src/audio/`
 - Online, el anfitrión les manda a los invitados los sonidos que solo él simula (choques, objetos usados, etc.).
 - **Locutor** (`Voices.js`): al confirmar un piloto se escucha su nombre; en el podio, "The winner is…" y el nombre del ganador. La música baja mientras habla. Las voces originales están en `NewSound/` y se procesan con `python3 tools/voices.py` (limpieza de ruido, tono más grave, capa una octava abajo, vocoder en La menor 7, EQ, saturación, compresión, chorus, eco a 118 BPM y reverb) → `src/assets/voices/`. Los ajustes de cada voz (semitonos, vocoder, reverb, eco) están al principio del script.
 
+## Mapas
+
+| Mapa | Cómo es |
+|---|---|
+| El Escritorio | Pista sobre un escritorio gigante: precipicio, tramo elevado sin barreras, un salto y un atajo por una regla |
+| El Living | Pista de juguete por todo un living de noche (1 u ≈ 3 cm, los muebles con su altura real): sube a la mesa del comedor por una silla y baja por el mantel, pasa por adentro de un estante, cruza una regla angosta hasta el sillón (almohadones con ranuras; atajo por arriba del respaldo), salta del apoyabrazos al ventanal elevado (con un tramo roto), **loop guiado** (entrando a 20 u/s o más se da la vuelta; más lento, se despega arriba y se cae), chicana en la alfombra a cuadros donde la mano del que está agachado empuja un autito rojo de un lado a otro de la pista (obstáculo que se mueve), mesita ratona sin bordes y túnel por el cubo azul. Texturas fotográficas (parquet, terciopelo, lino, bouclé, yeso, roble, algodón y polar) y personas con articulaciones (cinemática inversa: uno tipea en la notebook, el otro sigue el autito con la mano) |
+
+Cada mapa vive en `src/maps/` y se registra en `src/maps/index.js` con su pista, sus cajas de objetos, cómo se dibuja la pista y su ambiente. El Living usa el formato genérico de pista (`src/maps/living.js`): alturas por puntos clave (`profile`), huecos (`gaps`), tramos sin baranda (`open`), tramos angostos (`widths`), un atajo con su propio perfil y los muebles como superficies (`surfaces`: si te caés fuera de la pista, caés arriba del mueble). El juego arma cada mapa la primera vez que se juega. Online, el anfitrión elige el mapa al crear el lobby.
+
 ## Estructura
 
 ```
@@ -155,6 +164,7 @@ src/
   Game.js             Loop (física a paso fijo de 120 Hz), estados, reinicio
   Car.js              Malla del auto + física arcade + inclinación/suspensión visual
   Track.js            Línea central (TrackPath), superficie, paredes, obstáculos, decoración
+  maps/               Mapas: registro (index.js), El Living (pista, visuales y ambiente)
   Collision.js        Colisiones con círculos: auto↔pared, auto↔obstáculo, auto↔auto
   CameraRig.js        Cámara compartida: encuadre, zoom acotado, prioridad al líder
   OffscreenTracker.js Estados OUT_OF_SCREEN / countdown / eliminación
@@ -190,6 +200,8 @@ src/
 - Power-ups: `POWERUP_CONFIG` (duraciones, fuerzas, probabilidades `weight`, posiciones y respawn de cajas).
 
 ## Créditos
+
+- Texturas fotográficas de El Living: [Poly Haven](https://polyhaven.com) (licencia CC0): rectangular_parquet, velour_velvet, rough_linen, wool_boucle, painted_plaster_wall, black_oak_veneer, oak_veneer_01, cotton_jersey, knitted_fleece. Recomprimidas en `public/textures/living/` (las telas, en gris para teñirlas con los colores de la referencia).
 
 - Modelos de los autos (modificados: repintados con el color de cada jugador, materiales ajustados y optimizados con gltf-transform, en `src/assets/models/`):
   - [«2023 Toyota Corolla Hybrid»](https://sketchfab.com/3d-models/2023-toyota-corolla-hybrid-cd2f6b34664442ad906a40bd00136881) por [tonielpro520](https://sketchfab.com/tonielpro520), licencia [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) (`corolla.glb`).

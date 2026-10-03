@@ -53,7 +53,7 @@ export async function browseLobbies(onChange) {
  */
 export class OnlineSession {
   /** Crea un lobby nuevo como anfitrión. */
-  static async host(profile, { name, isPublic, rounds, powerups }) {
+  static async host(profile, { name, isPublic, rounds, powerups, map = 'desk' }) {
     const code = makeCode();
     const s = new OnlineSession(profile, code, true);
     s.channel = await openChannel(room(code));
@@ -64,6 +64,7 @@ export class OnlineSession {
       public: isPublic,
       rounds,
       powerups,
+      map,
       max: NET.maxPlayers,
       phase: 'lobby',
       players: [{ id: profile.id, name: profile.name, slot: 0, host: true, ready: true, driver: null, confirmed: false }],
@@ -299,6 +300,7 @@ export class OnlineSession {
     const race = {
       rounds: s.rounds,
       powerups: s.powerups,
+      map: s.map ?? 'desk',
       players: [...s.players].sort((a, b) => a.slot - b.slot).map((p) => ({ id: p.id, name: p.name, slot: p.slot, driver: p.driver })),
     };
     this.changed();
@@ -316,8 +318,8 @@ export class OnlineSession {
     this.changed();
   }
 
-  setOptions({ rounds, powerups, name, isPublic }) {
-    Object.assign(this.state, { rounds, powerups, name, public: isPublic });
+  setOptions({ rounds, powerups, name, isPublic, map = this.state.map }) {
+    Object.assign(this.state, { rounds, powerups, name, public: isPublic, map });
     this.changed();
   }
 
@@ -359,7 +361,7 @@ export class OnlineSession {
     const host = s.players.find((p) => p.host);
     this.directory.send({
       t: 'ad',
-      lobby: { code: s.code, name: s.name, host: host.name, players: s.players.length, max: s.max, phase: s.phase, rounds: s.rounds, powerups: s.powerups },
+      lobby: { code: s.code, name: s.name, host: host.name, players: s.players.length, max: s.max, phase: s.phase, rounds: s.rounds, powerups: s.powerups, map: s.map ?? 'desk' },
     });
   }
 

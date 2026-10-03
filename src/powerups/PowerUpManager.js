@@ -35,7 +35,16 @@ export class PowerUpManager {
     this.onKnockout = null; // (car) → void: se quedó sin vida (Game lo elimina)
     this.enabled = true;
     this.boxes = [];
+    this.positions = POWERUP_CONFIG.itemBoxes.positions;
     this.setAmount('normal');
+  }
+
+  /** Otro mapa: su pista y sus cajas (se rearman con la cantidad actual). */
+  setTrack(track, positions) {
+    this.track = track;
+    this.positions = positions;
+    this.level = null;
+    this.setAmount(this.enabled ? this.amount ?? 'normal' : 'off');
   }
 
   /** Nuevos autos (al rearmar los jugadores): inventarios y efectos desde cero. */
@@ -58,6 +67,7 @@ export class PowerUpManager {
    * (ver POWERUP_CONFIG.itemBoxes: qué cajas aparecen y cada cuánto reaparecen).
    */
   setAmount(amount) {
+    this.amount = amount;
     this.enabled = amount !== 'off';
     const level = this.enabled ? amount : 'normal';
     if (level !== this.level) {
@@ -65,7 +75,7 @@ export class PowerUpManager {
       for (const box of this.boxes) box.dispose();
       const B = POWERUP_CONFIG.itemBoxes;
       const respawn = B.amounts[level].respawnTime;
-      this.boxes = B.positions
+      this.boxes = this.positions
         .filter((p) => p.in.includes(level))
         .map((p, i) => {
           const q = this.track.path.pointAt(this.track.sOf(p.at), p.offset);
