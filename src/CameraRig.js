@@ -240,6 +240,25 @@ export class CameraRig {
     this.midpoint.copy(p);
   }
 
+  /**
+   * Paneo de presentación del mapa: la cámara vuela por `shots` ([[posición], [mira a]] …) y termina
+   * exactamente en la pose de la cámara de juego (`end`: { pos, target, fov }), así el pase a la
+   * cuenta 3‑2‑1 no tiene corte. t / T: tiempo transcurrido y duración.
+   */
+  flyThrough(t, T, shots, end) {
+    if (!this.fly || this.fly.shots !== shots || this.fly.end !== end) {
+      const P = [...shots.map(([p]) => new THREE.Vector3(...p)), end.pos.clone()];
+      const L = [...shots.map(([, l]) => new THREE.Vector3(...l)), end.target.clone()];
+      this.fly = { shots, end, pos: new THREE.CatmullRomCurve3(P, false, 'centripetal'), look: new THREE.CatmullRomCurve3(L, false, 'centripetal') };
+    }
+    const k = clamp(t / T, 0, 1);
+    const s = k * k * (3 - 2 * k); // arranca y llega suave
+    this.camera.position.copy(this.fly.pos.getPointAt(s));
+    this.camera.lookAt(this.fly.look.getPointAt(s));
+    this.applyFov(52 + (end.fov - 52) * s);
+    this.camera.updateMatrixWorld();
+  }
+
   /** Vuelve de la cámara del festejo a la de juego. */
   endCinematic() {
     if (!this.cine) return;

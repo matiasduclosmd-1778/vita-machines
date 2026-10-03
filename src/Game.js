@@ -65,6 +65,8 @@ export class Game {
     this.input.onPress((code) => {
       if (!this.running) return; // en menús y en pausa las teclas son del menú
       const pad = parsePad(code)?.button;
+      // El paneo de presentación se saltea con cualquier tecla o botón (online, solo el anfitrión)
+      if (this.state === 'intro' && code !== 'Escape' && pad !== 'Start' && !(this.net && !this.net.isHost)) return this.skipIntro();
       if (code === 'Escape' || pad === 'Start') {
         // Online la carrera no se pausa: el menú se abre encima mientras sigue
         if (this.net) return this.callbacks.onOnlineMenu?.();
@@ -415,11 +417,14 @@ export class Game {
     this.tiebreak = false;
     this.hud.hideResult();
     this.result = null;
-    this.startRound();
+    this.startRound({ intro: RACE.intro > 0 });
   }
 
-  /** Ronda: todos a la grilla con la vida llena, objetos reiniciados y cuenta 3…2…1. */
-  startRound() {
+  /**
+   * Ronda: todos a la grilla con la vida llena, objetos reiniciados y cuenta 3…2…1.
+   * intro: antes de la cuenta, paneo de presentación por el mapa (solo al empezar la partida).
+   */
+  startRound({ intro = false } = {}) {
     this.cars.forEach((car, i) => {
       const p = this.track.startPosition(i);
       car.reset(p.x, p.z, p.heading, p.y);
@@ -430,7 +435,8 @@ export class Game {
     this.powerups.reset();
     this.drivers?.forEach((d) => d?.reset());
     // Cuenta regresiva 3…2…1 antes de largar (ver frame); después, 'racing'
-    this.state = 'countdown';
+    this.state = intro ? 'intro' : 'countdown';
+    this.introTime = 0;
     this.countdown = RACE.countdown;
     this.goTimer = 0;
     this.raceTime = 0;
@@ -441,6 +447,27 @@ export class Game {
     this.startCue = true; // en el primer cuadro se calla la música anterior (la de carrera entra con el "¡YA!")
     const leader = this.leader();
     this.rig.update(0, this.cars, leader, this.cameraYaw(this.cars, leader), true);
+    // Pose de la cámara de juego en la largada: ahí termina el paneo
+    this.introEnd = { pos: this.rig.camera.position.clone(), target: this.rig.focus.clone(), fov: this.rig.camera.fov };
+    this.introShots = this.map.intro ?? this.autoIntro();
+  }
+
+  /** Paneo de un mapa sin tomas propias: vista general y dos pasadas sobre la pista. */
+  autoIntro() {
+    const P = this.track.path;
+    const pts = P.points;
+    const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+    const cz = pts.reduce((s, p) => s + p.z, 0) / pts.length;
+    const at = (f, h) => {
+      const p = P.pointAt(this.track.startS + P.length * f);
+      return [[p.x - Math.sin(p.heading) * 30, p.y + h, p.z - Math.cos(p.heading) * 30], [p.x, p.y, p.z]];
+    };
+    return [[[cx + 60, 220, cz + 200], [cx, 0, cz]], at(0.4, 45), at(0.72, 40)];
+  }
+
+  /** Saltea el paneo de presentación (cualquier tecla). */
+  skipIntro() {
+    if (this.state === 'intro') this.introTime = RACE.intro;
   }
 
   frame(time) {
@@ -448,6 +475,16 @@ export class Game {
     this.lastTime = time;
 
     const guest = this.net && !this.net.isHost;
+    // Paneo de presentación (el anfitrión decide cuándo termina; el invitado lo anima con su reloj)
+    if (this.state === 'intro') {
+      if (this.prevState !== 'intro' && guest) this.introTime = 0;
+      this.introTime += dt;
+      if (!guest && this.introTime >= RACE.intro) {
+        this.state = 'countdown';
+        this.countdown = RACE.countdown;
+        this.rig.applyFov(this.rig.fov);
+      }
+    }
     // Cuenta regresiva (la lleva el anfitrión; el invitado recibe cuánto falta)
     if (this.state === 'countdown' && !guest) {
       this.countdown -= dt;
@@ -483,7 +520,9 @@ export class Game {
     const champ = this.state === 'celebrate' ? this.cars[this.celebrant] : null;
     const framed = champ ? [champ] : this.cars.filter((c) => c.alive && !c.fall);
     const leader = champ ?? this.leader();
-    if (champ) {
+    if (this.state === 'intro' && this.introEnd) {
+      this.rig.flyThrough(this.introTime, RACE.intro, this.introShots, this.introEnd); // presentación del mapa
+    } else if (champ) {
       this.rig.cinematic(dt, champ); // festejo: paneo cinematográfico alrededor del ganador
       champ.marker.visible = false; // su nombre flotante taparía la toma (vuelve en la ronda siguiente)
     }
@@ -521,7 +560,7 @@ export class Game {
   /** Controles de cada auto: piloto de la CPU, jugador remoto (online) o teclado/joystick. */
   inputFor(i) {
     if (this.state === 'celebrate' || this.state === 'finished') return BRAKE;
-    if (this.state === 'countdown') {
+    if (this.state === 'countdown' || this.state === 'intro') {
       // Quietos; acelerar solo hace rugir el motor
       const car = this.cars[i];
       const throttle = this.drivers?.[i] ? 0.35 : (this.net ? this.net.inputFor(i) : this.input.axis(car.player.controls, car.player.pad)).throttle;
@@ -711,7 +750,7 @@ export class Game {
     this.hud.setStart(this.state === 'countdown' ? Math.max(1, Math.ceil(this.countdown)) : this.goTimer > 0 ? 'go' : null);
     // Ronda en curso y cartel del ganador de la ronda (también en los invitados, con lo que manda el anfitrión)
     this.hud.setRound(this.round, this.rounds, this.tiebreak);
-    this.hud.setCinema(this.state === 'celebrate' && this.celebrant >= 0);
+    this.hud.setCinema((this.state === 'celebrate' && this.celebrant >= 0) || this.state === 'intro');
     if (this.state === 'celebrate') {
       const champ = this.cars[this.celebrant];
       this.hud.showRoundWinner(champ ? { name: champ.player.name, color: champ.player.color, wins: this.scores[this.celebrant], round: this.round } : null);

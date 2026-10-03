@@ -448,6 +448,7 @@ export const GAME_CONFIG = {
     rounds: 6, // por defecto
     celebrate: 4.8, // segundos de festejo del ganador de la ronda (paneo de cámara, saltitos con vuelta)
     hops: [1.0, 2.5], // en qué momentos del festejo salta (con una vuelta sobre sí mismo)
+    intro: 8, // segundos del paneo cinematográfico por el mapa al empezar la partida (antes de la cuenta; se saltea con cualquier tecla)
     countdown: 3, // segundos de la cuenta 3…2…1 antes de largar (los autos quedan quietos)
     goShow: 0.8, // cuánto queda en pantalla el "¡YA!"
   },

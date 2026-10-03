@@ -26,7 +26,7 @@ export const LIVING = {
     sitting: { x: 120, z: 18 }, // tipea en la notebook, en la mesa del comedor
     crouching: { x: -12, z: -73 }, // agachado en la alfombra, empuja el autito por la pista
   },
-  arch: [-122, 157],
+  arch: [-94, 158], // adelante de la grilla: los autos largan pasando por abajo (atrás taparía la cámara)
 };
 
 const S = LIVING.sofa;
