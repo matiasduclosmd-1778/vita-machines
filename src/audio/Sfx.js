@@ -78,6 +78,16 @@ export const SFX = {
     synth(A, out, t, { freq: 950, sweepTo: 180, sweepTime: 0.07, dur: 0.07, type: 'square', gain: 0.05 * o.gain, cutoff: 3500, pan: o.pan, bus: 'sfx' });
     synth(A, out, t, { freq: 120, sweepTo: 60, sweepTime: 0.05, dur: 0.05, type: 'sine', gain: 0.12 * o.gain, pan: o.pan, bus: 'sfx' });
   },
+  // Lanzallamas: soplido de ruido grave y áspero (suena 20 veces por segundo: corto y suave)
+  'use-FLAME': (A, out, t, o) => {
+    noise(A, out, t, { dur: 0.09, freq: 700, q: 0.7, gain: 0.09 * o.gain, attack: 0.01, pan: o.pan, ...S });
+    noise(A, out, t, { dur: 0.06, freq: 3200, filter: 'highpass', gain: 0.025 * o.gain, pan: o.pan, ...S });
+  },
+  // Se prende fuego un auto: "fwoosh" que sube
+  burn: (A, out, t, o) => {
+    noise(A, out, t, { dur: 0.45, freq: 400, sweepTo: 2200, sweepTime: 0.3, q: 1.2, gain: 0.16 * o.gain, attack: 0.02, pan: o.pan, ...S, sends: { reverb: 0.15 } });
+    synth(A, out, t, { freq: 160, sweepTo: 90, sweepTime: 0.3, dur: 0.3, type: 'sawtooth', gain: 0.04 * o.gain, cutoff: 800, pan: o.pan, bus: 'sfx' });
+  },
   'bullet-hit': (A, out, t, o) => {
     synth(A, out, t, { freq: 2200, dur: 0.05, type: 'triangle', gain: 0.06 * o.gain, release: 0.06, pan: o.pan, bus: 'sfx' });
     noise(A, out, t, { dur: 0.06, freq: 4000, q: 2, gain: 0.07 * o.gain, pan: o.pan, ...S });

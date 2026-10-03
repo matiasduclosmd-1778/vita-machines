@@ -104,7 +104,8 @@ export class HUD {
         slot.querySelector('.item-name').textContent = p.item ? p.item.name : 'EMPTY';
       }
       // Balas del arma (contador sobre el casillero)
-      const ammo = p.item?.fire ? String(p.ammo) : '';
+      // Balas del arma, o carga del lanzallamas en %
+      const ammo = !p.item?.fire ? '' : p.item.fuel ? `${Math.ceil((p.ammo / p.item.ammo) * 100)}%` : String(p.ammo);
       const ammoEl = slot.querySelector('.item-ammo');
       if (ammoEl.textContent !== ammo) ammoEl.textContent = ammo;
       // Efectos activos con tiempo restante

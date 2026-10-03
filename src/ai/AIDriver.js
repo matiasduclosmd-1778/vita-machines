@@ -155,9 +155,9 @@ export class AIDriver {
   thinkItems(dt, s) {
     const inv = this.game.powerups.inventory(this.car);
     this.firing = false;
-    // Arma: ráfagas mientras tenga un rival adelante y cerca
-    if (inv.item?.id === 'GUN') {
-      this.firing = this.goodMoment('GUN', s);
+    // Arma y lanzallamas: ráfagas mientras tenga un rival adelante y cerca
+    if (inv.item?.id === 'GUN' || inv.item?.id === 'FLAME') {
+      this.firing = this.goodMoment(inv.item.id, s);
       return;
     }
     if (!inv.item) {
@@ -208,6 +208,8 @@ export class AIDriver {
         return dist < 22;
       case 'GUN':
         return ahead > 0.93 && dist < 45 && sameLevel;
+      case 'FLAME':
+        return ahead > 0.8 && dist < 14 && sameLevel;
       case 'TURBO': {
         // En recta y sin bordes peligrosos cerca (o para el salto)
         if (P.forward(s, this.takeoffS) < 45) return true;

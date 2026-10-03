@@ -33,6 +33,7 @@ export function defaultSettings() {
     audio: { master: 80, music: 70, sfx: 80 }, // volúmenes 0..100 (ver src/audio/)
     game: {
       debug: GAME_CONFIG.debug.enabled,
+      camera: GAME_CONFIG.camera.view, // vista de cámara (ver GAME_CONFIG.camera.views)
     },
     controls: DEFAULT_CONTROLS.map((c) => ({ ...c })),
     pads: GAME_CONFIG.players.map((_, i) => i), // joystick de cada jugador (0 = el primero conectado) o null

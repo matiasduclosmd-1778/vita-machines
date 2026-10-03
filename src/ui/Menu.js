@@ -172,6 +172,16 @@ export class Menu {
 
   onKey(e) {
     if (!this.visible) return;
+    // Escribiendo en un campo (nombres): las teclas son del texto; Escape solo sale del campo
+    const t = e.target;
+    if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t?.isContentEditable) {
+      if (e.code === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        t.blur();
+      }
+      return;
+    }
     if (this.listening) {
       e.preventDefault();
       e.stopPropagation();
@@ -537,7 +547,7 @@ export class Menu {
           ${this.header('ELEGÍ TU PILOTO')}
           <div class="vm-pk-players">
             <div class="vm-pk-dots">${players.map((p, i) => `<span class="vm-pk-dot" data-dot="${i}" style="background:${p.color};${i ? 'margin-left:-11px' : ''}">${i < r.humans ? i + 1 : '🤖'}</span>`).join('')}</div>
-            <div><b>${players.map((_, i) => esc(name(i))).join(' · ')}</b><small>${sub}</small></div>
+            <div><b data-names>${players.map((_, i) => esc(name(i))).join(' · ')}</b><small>${sub}</small></div>
           </div>
         </div>
         <section class="vm-pk-grid" role="listbox" aria-label="Pilotos">
@@ -545,7 +555,7 @@ export class Menu {
         </section>
         <div class="vm-pk-foot">
           <div class="vm-pk-keys" ${humans.length > 2 ? 'style="font-size:.82em"' : ''}>
-            ${humans.map((i) => `<span data-keys="${i}"><i class="vm-pk-pill" style="background:${players[i].color}"></i>${esc(name(i))} ${keys(i)}</span>`).join('')}
+            ${humans.map((i) => `<span data-keys="${i}"><i class="vm-pk-pill" style="background:${players[i].color}"></i><input class="vm-pk-player" maxlength="${LOCAL.nameMax}" value="${esc(this.settings.names[i])}" placeholder="${esc(localPlayerName({ ...this.settings, names: [] }, i).name)}" data-player-name="${i}" aria-label="Nombre del jugador ${i + 1}" title="Tu nombre: hacé clic para cambiarlo"> ${keys(i)}</span>`).join('')}
           </div>
           <div style="display:flex;align-items:center;gap:22px">
             <span class="vm-pk-status" data-status aria-live="polite"></span>
@@ -574,6 +584,21 @@ export class Menu {
         }));
         el.querySelector('[data-cta]').addEventListener('click', () => confirm(turn() ?? humans[0]));
         el.querySelectorAll('.vm-pk-tags').forEach((t) => (t.innerHTML = ''));
+        // Nombre de cada jugador: se escribe acá mismo (es el mismo de la pantalla Jugadores)
+        el.querySelectorAll('[data-player-name]').forEach((field) => {
+          const pi = Number(field.dataset.playerName);
+          const save = () => {
+            this.settings.names[pi] = field.value.replace(/\s+/g, ' ').trim();
+            this.commitSettings(); // actualiza humanName (cartel, HUD y podio)
+            el.querySelector('[data-names]').textContent = players.map((_, i) => name(i)).join(' · ');
+            update();
+          };
+          field.addEventListener('change', save);
+          field.addEventListener('keydown', (e) => {
+            e.stopPropagation(); // las letras son del nombre, no para elegir piloto
+            if (e.code === 'Enter' || e.code === 'NumpadEnter' || e.code === 'Escape') field.blur();
+          });
+        });
       },
     });
 
@@ -831,6 +856,7 @@ export class Menu {
       'video.quality': [['high', 'Alta'], ['low', 'Baja']],
       'video.shadows': [['high', 'Altas'], ['low', 'Bajas'], ['off', 'Desactivadas']],
       'video.renderScale': [[1, '100 %'], [0.75, '75 %'], [0.5, '50 %']],
+      'game.camera': Object.entries(GAME_CONFIG.camera.views).map(([id, view]) => [id, view.label]),
     };
     const row = (label, control, hint = '') => `<div class="vm-row"><span>${label}${hint ? `<span class="hint">${hint}</span>` : ''}</span>${control}</div>`;
     const toggle = (key, on) => `<button class="vm-toggle ${on ? 'on' : ''}" data-toggle="${key}"></button>`;
@@ -858,6 +884,7 @@ export class Menu {
       ].join('');
     } else {
       content = [
+        row('Vista de cámara', stepper('game.camera', OPTIONS['game.camera'], g.camera), 'Perspectiva: más baja, se ve más camino y el lente se abre con la velocidad'),
         row('Panel de debug', toggle('game.debug', g.debug), 'También con la tecla V durante la carrera'),
       ].join('');
     }

@@ -289,6 +289,8 @@ export class Game {
       sun.shadow.map = null;
     }
 
+    this.rig.setView(settings.game.camera);
+
     this.debug.enabled = settings.game.debug;
     this.debug.apply();
 
@@ -457,11 +459,12 @@ export class Game {
     }
     if (this.net?.isHost) this.net.afterFrame(dt);
 
+    for (const car of this.cars) car.scaleMarker(this.rig.camera.position);
     this.environment.follow(this.rig.focus);
     this.updateHUD();
     this.debug.update(this.cars, this.rig, this.tracker, this.powerups);
     // El efecto miniatura mantiene nítida la franja de pantalla donde están los jugadores
-    this.postfx.setFocus((this.rig.toNDC(this.rig.midpoint).y + 1) / 2);
+    this.postfx.setFocus((this.rig.toNDC(this.rig.midpoint).y + 1) / 2, this.rig.focusBand);
     this.postfx.render();
   }
 
@@ -511,12 +514,14 @@ export class Game {
 
   /**
    * Hacia dónde mira la cámara: el sentido promedio de la pista entre el punto medio
-   * de los jugadores (en progreso de carrera) y un poco por delante del líder.
+   * de los jugadores (en progreso de carrera) y un tramo por delante del líder, más largo
+   * cuanto más rápido va (así empieza a girar antes de las curvas).
    */
   cameraYaw(cars, leader) {
     if (!leader) return this.rig.yaw;
     const mid = cars.reduce((sum, c) => sum + c.progress, 0) / cars.length;
-    const ahead = leader.progress - mid + CAM.yawLookAhead;
+    const speed = Math.hypot(leader.velocity.x, leader.velocity.z);
+    const ahead = leader.progress - mid + CAM.yawLookAhead + CAM.yawLookAheadTime * speed;
     return this.track.headingAround(this.track.startS + mid, 0, ahead);
   }
 

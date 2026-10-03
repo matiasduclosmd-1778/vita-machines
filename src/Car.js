@@ -118,6 +118,13 @@ export class Car {
     this.labelTexture.dispose();
   }
 
+  /** El nombre flotante se agranda con la distancia de la cámara (ver GAME_CONFIG.marker). */
+  scaleMarker(cameraPosition) {
+    const M = GAME_CONFIG.marker;
+    const d = this.position.distanceTo(cameraPosition);
+    this.marker.scale.setScalar(Math.min(M.maxScale, Math.max(1, (d / M.refDistance) ** M.keep)));
+  }
+
   eliminate() {
     this.state = PlayerState.ELIMINATED;
     this.marker.visible = false;

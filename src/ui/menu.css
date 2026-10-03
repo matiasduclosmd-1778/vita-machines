@@ -553,7 +553,15 @@
 .vm-pk-keys > span { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
 .vm-pk-keys kbd { font-family: 'Lilita One', sans-serif; font-size: 18px; color: var(--pk-ink); background: var(--pk-cream); border: 3px solid var(--pk-ink); border-radius: 8px; padding: 1px 10px; box-shadow: 0 4px 0 var(--pk-ink); }
 .vm-pk-pill { width: 16px; height: 16px; border-radius: 50%; }
-.vm-pk-status { font-weight: 800; font-size: 19px; color: #cfc6b5; }
+/* Nombre editable de cada jugador (abajo, junto a sus teclas) */
+.vm-pk-player { width: 6.5em; font: 800 1em 'Nunito', sans-serif; color: #fff; background: transparent; border: none; border-bottom: 2px dashed #6b6457; padding: 2px 4px; outline: none; }
+@supports (field-sizing: content) {
+  .vm-pk-player { width: auto; field-sizing: content; min-width: 3em; max-width: 9em; } /* mide lo que el nombre */
+}
+.vm-pk-player::placeholder { color: #cfc6b5; }
+.vm-pk-player:hover { border-bottom-color: #cfc6b5; }
+.vm-pk-player:focus { border-bottom: 2px solid var(--pk-yellow); background: rgba(255, 255, 255, 0.06); border-radius: 4px 4px 0 0; }
+.vm-pk-status { white-space: nowrap; font-weight: 800; font-size: 19px; color: #cfc6b5; }
 .vm-pk-cta { font-family: 'Lilita One', sans-serif; font-size: 36px; min-width: 420px; height: 84px; }
 
 @media (prefers-reduced-motion: reduce) { .vm-pk * { transition: none !important; } }

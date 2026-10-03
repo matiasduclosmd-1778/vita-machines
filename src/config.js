@@ -19,11 +19,19 @@ export const GAME_CONFIG = {
     shadowSoftness: 3, // radio de desenfoque de las sombras
     ambientOcclusion: { enabled: false, radius: 2.2, intensity: 0.85 }, // sombras de contacto (costoso)
     bloom: { enabled: true, strength: 0.45, radius: 0.35, threshold: 2.2 }, // brillo solo en luces (faroles, faros, turbo)
-    tiltShift: { enabled: true, focusBand: 0.2, maxBlur: 2.2 }, // efecto miniatura (bordes desenfocados)
+    tiltShift: { enabled: true, maxBlur: 2.2 }, // efecto miniatura (bordes desenfocados; la franja nítida depende de la vista de cámara)
     grade: { saturation: 1.08, contrast: 1.06, warmth: 0.03, vignette: 0.32 }, // corrección de color
   },
 
   physicsStep: 1 / 120,
+
+  // Nombre flotante sobre cada auto (con su flechita). Con la cámara lejos se agranda en parte, así no
+  // se pierde de vista: tamaño en pantalla ∝ (distancia / refDistance)^-(1 - keep).
+  marker: {
+    refDistance: 24, // hasta esta distancia de cámara se ve del tamaño original
+    keep: 0.7, // cuánto se compensa el alejamiento (0 = se achica como todo, 1 = tamaño fijo en pantalla)
+    maxScale: 2.6, // tope del agrandado
+  },
 
   players: [
     {
@@ -218,15 +226,15 @@ export const GAME_CONFIG = {
       lean: true,
       yawOffset: 0,
       fragile: {
-        mass: 0.55, // en un choque contra un auto (masa 1) se lleva casi el doble de empujón
-        minImpact: 3, // velocidad de choque (u/s) a partir de la cual sale en trompo
-        fullImpact: 12, // a esta velocidad de choque, el trompo es completo
-        spinRate: 14, // giro del trompo (rad/s): ~2 vueltas por segundo
-        spinTime: 1.0, // segundos sin control en el trompo completo
-        spinDamping: 1.2, // el trompo se frena más lento que el giro normal por golpes
+        mass: 0.7, // en un choque contra un auto (masa 1) se lleva algo más de empujón
+        minImpact: 6, // velocidad de choque (u/s) a partir de la cual sale en trompo (los roces no)
+        fullImpact: 16, // a esta velocidad de choque, el trompo es completo
+        spinRate: 8, // giro del trompo (rad/s)…
+        spinTime: 0.6, // segundos sin control en el trompo completo
+        spinDamping: 2.5, // …y se frena rápido: el trompo completo es ~media vuelta
         grip: 0.12, // agarre durante el trompo: patina
-        knockRoll: 0.85, // cuánto queda tirada de costado mientras gira (rad)
-        bump: 2, // rebote visual de los golpes, comparado con un auto
+        knockRoll: 0.6, // cuánto queda tirada de costado mientras gira (rad)
+        bump: 1.4, // rebote visual de los golpes, comparado con un auto
       },
       jump: { speed: 13, cooldown: 0.35 }, // la moto salta un poco más alto que los autos (ver vehicle.jump)
     },
@@ -245,8 +253,28 @@ export const GAME_CONFIG = {
     },
     minDistance: 24, // MIN_CAMERA_DISTANCE: lo más cerca que llega
     maxDistance: 60, // MAX_CAMERA_DISTANCE: nunca se aleja más que esto
-    fov: 45,
-    pitch: 48 * DEG, // inclinación respecto del piso (90 = cenital)
+
+    // Vistas de cámara (Configuración → Juego). El encuadre siempre se calcula con `fov`; `speedFov` solo
+    // abre el lente por encima de eso según la velocidad, así que nunca deja a nadie afuera.
+    //  pitch:     inclinación respecto del piso (90 = cenital); más baja = más perspectiva, más camino adelante.
+    //             Puede ser un rango [juntos, separados]: la cámara baja hacia el horizonte con los autos cerca
+    //             y sube a una vista más cenital a medida que se separan (pitchSpread: separación en unidades
+    //             de mundo, [desde, hasta], entre el primero y el último)
+    //  fov:       lente base (grados)
+    //  speedFov:  grados extra a velocidad máxima (abre con velocidad, cierra al frenar)
+    //  focusBand: franja nítida del efecto miniatura; speedBand: cuánto se ensancha a velocidad máxima
+    //  aim:       altura de pantalla (-1 abajo … 1 arriba) donde queda el grupo; sin aim se centra sobre el piso
+    //             (con la cámara baja eso los sube y se vería el camino de atrás)
+    //  minDistance / maxDistance: pisan a los generales. Un máximo más chico = cámara más cerca, pero el
+    //             que queda atrás sale de pantalla (y queda eliminado) con menos distancia al líder
+    view: 'classic',
+    views: {
+      classic: { label: 'Clásica', pitch: 48 * DEG, fov: 45, speedFov: 0, focusBand: 0.2, speedBand: 0 },
+      perspective: { label: 'Perspectiva', pitch: [27 * DEG, 58 * DEG], pitchSpread: [2, 12], fov: 50, speedFov: 14, focusBand: 0.3, speedBand: 0.12, aim: -0.2, minDistance: 16, maxDistance: 30 },
+    },
+    fovSmoothing: 0.9, // qué tan rápido el lente sigue a la velocidad (1/s)
+    fovRate: 0.35, // y como mucho cuánto cambia por segundo (fracción de speedFov): así no tiembla
+    pitchSmoothing: 1.2, // qué tan rápido la inclinación sigue a la separación de los autos (1/s)
 
     // Zona segura: margen interno por lado, como fracción del ancho/alto de pantalla.
     // Un jugador fuera de este rectángulo pasa a OUT_OF_SCREEN.
@@ -259,10 +287,14 @@ export const GAME_CONFIG = {
     lookAhead: 0.3, // segundos de anticipación según la velocidad promedio
 
     smoothing: 3.5, // paneo hacia el punto medio (1/s)
+    aimSmoothing: 14, // vistas con `aim`: corrimiento por altura de pantalla e inclinación (rápido: ver CameraRig)
     zoomOutSmoothing: 3, // alejarse es más rápido…
     zoomInSmoothing: 1.0, // …que acercarse
     yawSmoothing: 1.4, // giro de la cámara siguiendo la pista (1/s)
-    yawLookAhead: 24, // tramo de pista delante del líder que orienta la cámara
+    yawLookAhead: 24, // tramo de pista delante del líder que orienta la cámara…
+    yawLookAheadTime: 0.6, // …más lo que recorre el líder en este tiempo (s): a más velocidad, anticipa antes las curvas
+    heightSmoothing: 1.2, // altura del foco (saltos y desniveles): más lenta que el paneo, así no rebota (1/s)
+    velocitySmoothing: 4, // velocidad usada para anticipar el encuadre: los choques no lo sacuden (1/s)
   },
 
   // Quedar atrás: salir de la zona segura elimina en el acto
@@ -587,7 +619,7 @@ export const POWERUP_CONFIG = {
   // Ametralladora: balas hacia donde apunta el vehículo. Tocar = un tiro; mantener = automático
   gun: {
     weight: 0.9,
-    ammo: 15, // balas por arma
+    ammo: 40, // balas por arma
     damage: 4, // vida que saca cada bala
     fireRate: 10, // balas por segundo manteniendo apretado
     speed: 75, // u/s (se suma la velocidad del auto)
@@ -595,6 +627,23 @@ export const POWERUP_CONFIG = {
     spread: 0.025, // dispersión (radianes)
     push: 1.2, // empujoncito por bala (u/s)
     color: '#ffd166',
+  },
+  // Lanzallamas: chorro de fuego corto hacia adelante. Tocar = una bocanada; mantener = fuego continuo
+  flamethrower: {
+    weight: 0.8,
+    ammo: 70, // carga: bocanadas por tanque (a fireRate = 3.5 s de fuego)
+    fireRate: 20, // bocanadas por segundo manteniendo apretado
+    damage: 0.7, // vida que saca cada bocanada que lo toca (el tanque entero sobre un rival quieto, con el ardor: ~70)
+    burnTime: 1.5, // después de tocarlo queda ardiendo…
+    burnDamage: 4, // …perdiendo esta vida por segundo (se renueva mientras lo siga quemando)
+    speed: 28, // u/s al salir (se suma casi toda la velocidad del auto)…
+    drag: 2.2, // …y se frena: alcance ~11 u quieto, ~20 u a fondo (la ametralladora llega a ~55)
+    lifetime: 0.55, // segundos que dura cada bocanada
+    radius: [0.35, 1.5], // tamaño de la bocanada al salir y al apagarse (u): el chorro se abre
+    spread: 0.08, // dispersión (radianes)
+    rise: 1.2, // el fuego sube (u/s)
+    push: 0.25, // empujoncito por bocanada (u/s)
+    color: '#ff7b1c',
   },
   // Corazón de vida: al usarlo restaura el 100% de la vida
   heart: {

@@ -117,9 +117,10 @@ export class Debug {
     lines.push(
       'CAMERA',
       `  Distance:        ${f(rig.distance)}`,
+      `  Pitch:           ${f(THREE.MathUtils.radToDeg(rig.pitch))}°`,
       `  Target Distance: ${f(rig.targetDistance)}${rig.atMaxDistance ? '  ← MAX' : ''}`,
       `  Required:        ${f(rig.requiredDistance)}`,
-      `  Min / Max:       ${f(CAM.minDistance)} / ${f(CAM.maxDistance)}`,
+      `  Min / Max:       ${f(rig.minDistance)} / ${f(rig.maxDistance)}`,
       'PLAYERS',
       `  Distance: ${f(cars[0].position.distanceTo(cars[1].position))}`,
     );

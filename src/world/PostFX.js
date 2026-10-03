@@ -87,6 +87,7 @@ export class PostFX {
     this.camera = camera;
     this.quality = G.quality;
     this.focus = 0.5;
+    this.band = 0.2;
     this.build();
   }
 
@@ -137,7 +138,7 @@ export class PostFX {
       for (const d of [new THREE.Vector2(1 / (w * pr), 0), new THREE.Vector2(0, 1 / (h * pr))]) {
         const pass = new ShaderPass(TiltShiftShader);
         pass.uniforms.dir.value.copy(d).multiplyScalar(pr);
-        pass.uniforms.band.value = G.tiltShift.focusBand;
+        pass.uniforms.band.value = this.band;
         pass.uniforms.maxBlur.value = G.tiltShift.maxBlur;
         composer.addPass(pass);
         this.tilt.push(pass);
@@ -156,9 +157,13 @@ export class PostFX {
   }
 
   /** Altura de pantalla (0 abajo … 1 arriba) que queda nítida: la de los jugadores. */
-  setFocus(y) {
+  setFocus(y, band = this.band) {
     this.focus += (Math.min(0.85, Math.max(0.15, y)) - this.focus) * 0.1;
-    for (const p of this.tilt) p.uniforms.focus.value = this.focus;
+    this.band = band;
+    for (const p of this.tilt) {
+      p.uniforms.focus.value = this.focus;
+      p.uniforms.band.value = band;
+    }
   }
 
   setSize(w, h) {

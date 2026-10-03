@@ -12,9 +12,10 @@ import { Magnet, MagnetEffect } from './Magnet.js';
 import { Shield, ShieldEffect } from './Shield.js';
 import { Heart, HealEffect } from './Heart.js';
 import { Gun, GunEffect, BulletView } from './Gun.js';
+import { Flamethrower, FlamethrowerEffect, BurningEffect, FlameView } from './Flamethrower.js';
 
-export const POWERUP_TYPES = [Turbo, Bomb, Missile, Oil, Magnet, Shield, Heart, Gun];
+export const POWERUP_TYPES = [Turbo, Bomb, Missile, Oil, Magnet, Shield, Heart, Gun, Flamethrower];
 
 // Online: efectos y objetos en pista que el invitado recrea a partir del estado del anfitrión
-export const EFFECT_TYPES = Object.fromEntries([TurboEffect, StunnedEffect, SlippingEffect, MagnetEffect, ShieldEffect, HealEffect, GunEffect].map((E) => [E.id, E]));
-export const ENTITY_VIEWS = { bomb: BombView, missile: MissileView, oil: OilView, bullet: BulletView };
+export const EFFECT_TYPES = Object.fromEntries([TurboEffect, StunnedEffect, SlippingEffect, MagnetEffect, ShieldEffect, HealEffect, GunEffect, FlamethrowerEffect, BurningEffect].map((E) => [E.id, E]));
+export const ENTITY_VIEWS = { bomb: BombView, missile: MissileView, oil: OilView, bullet: BulletView, flame: FlameView };
